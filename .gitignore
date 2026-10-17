@@ -1,0 +1,17 @@
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+.venv/
+.local/
+.models/
+build/
+dist/
+*.egg-info/
+
+# Generated runs and local corpus/reference media are reproducible but not source.
+runs/
+corpus-cache/
+reference-media/
+
