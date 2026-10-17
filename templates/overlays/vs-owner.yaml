@@ -1,0 +1,26 @@
+template_id: pokemon.ja.vs-owner.v1
+parent_template_id: pokemon.ja.historical.v1
+version: 1
+language: ja
+era: 2001
+series_hint: VS
+predicates:
+  owner_associated: true
+  vs_logo: expected
+zones:
+  artwork:
+    rect: [0.08, 0.105, 0.84, 0.34]
+    data_type: image
+    extractor: {provider: image-feature}
+  attacks:
+    rect: [0.08, 0.46, 0.84, 0.31]
+    data_type: text
+    extractor: {provider: ocr, script: ja}
+  collector_number:
+    rect: [0.05, 0.82, 0.45, 0.13]
+    data_type: collector-number
+    extractor: {provider: ocr, profile: collector-number}
+  special_layout_markers:
+    rect: [0.0, 0.76, 0.23, 0.24]
+    data_type: symbol-list
+    extractor: {provider: symbol, expected: [VS-logo, owner-portrait]}

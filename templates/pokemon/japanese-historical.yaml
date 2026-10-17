@@ -1,0 +1,17 @@
+template_id: pokemon.ja.historical.v1
+parent_template_id: pokemon.generic.v1
+version: 1
+language: ja
+era: historical
+predicates:
+  language: ja
+  border: yellow
+zones:
+  title:
+    rect: [0.03, 0.0, 0.72, 0.18]
+    data_type: text
+    extractor: {provider: ocr, script: ja}
+  hp:
+    rect: [0.68, 0.0, 0.30, 0.18]
+    data_type: integer
+    extractor: {provider: ocr, profile: hp}

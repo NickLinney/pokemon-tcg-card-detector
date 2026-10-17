@@ -1,0 +1,19 @@
+template_id: pokemon.modern-standard.v1
+parent_template_id: pokemon.generic.v1
+version: 1
+era: modern
+predicates:
+  border: modern
+zones:
+  artwork:
+    rect: [0.07, 0.14, 0.86, 0.38]
+    data_type: image
+    extractor: {provider: image-feature}
+  attacks:
+    rect: [0.07, 0.55, 0.86, 0.22]
+    data_type: text
+    extractor: {provider: ocr}
+  regulation_edition_promo:
+    rect: [0.82, 0.90, 0.12, 0.06]
+    data_type: symbol-list
+    extractor: {provider: symbol-ocr, expected: [regulation-mark]}

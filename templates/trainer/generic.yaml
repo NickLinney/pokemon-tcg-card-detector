@@ -1,0 +1,5 @@
+template_id: trainer.generic.v1
+parent_template_id: card.base.v1
+version: 1
+category: Trainer
+predicates: {category: Trainer}

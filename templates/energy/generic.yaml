@@ -1,0 +1,5 @@
+template_id: energy.generic.v1
+parent_template_id: card.base.v1
+version: 1
+category: Energy
+predicates: {category: Energy}
