@@ -1,5 +1,10 @@
 # Architecture
 
+This file summarizes the implemented Pre-Alpha 1 vertical slice. It is not the
+complete target architecture. The construction baseline required for robust and
+meticulous classification, zone localization, identification, and analysis is
+defined in `ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md`.
+
 The vertical slice is a local, staged evidence pipeline:
 
 `capture -> segment -> normalize -> template -> observe -> candidates -> targeted discriminator -> fuse -> decide -> inventory`

@@ -1,5 +1,10 @@
 # Implementation Status
 
+The target architecture is defined in
+`docs/architecture/ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md`. The statuses
+below describe the current vertical slice only and must not be read as a claim
+that the target architecture has been constructed.
+
 ## Implemented and verified
 
 - governed repository bootstrap and bounded write guard;
@@ -25,6 +30,11 @@
   calibration;
 - OCR calibration: usable on several title/HP zones, not reliable across all
   nine low-resolution sleeved cards.
+- template classification: the sample-specific predictor ranks only VS-owner
+  and modern-standard; it is not a general category/era/mechanic classifier;
+- zone analysis: nineteen semantic zones are declared by the resolved template,
+  but only title, HP, and collector number are localized and extracted at
+  runtime.
 
 ## Not implemented
 

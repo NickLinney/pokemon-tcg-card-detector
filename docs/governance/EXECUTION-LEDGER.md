@@ -66,3 +66,21 @@ commission status remains `PARTIALLY COMPLETE`: remote publication lacks an
 authorized credential; reference-image confirmation and accuracy measurement
 lack required evidence; release acceptance is not authorized. Continue from the
 feature branch without tagging until those distinct gates are satisfied.
+
+## 2026-10-17 — Architecture correction after evidence challenge
+
+- Trigger: Commissioner challenged whether template-type classification and
+  card-face zone identification had actually been performed to the prescribed
+  depth.
+- Verified that all nine cards received a sample-specific VS-owner hypothesis,
+  but the predictor offered only VS-owner and modern-standard alternatives and
+  used a VS template for its preliminary crop.
+- Verified that the resolved template declares nineteen zones while the runtime
+  localized and extracted only title, HP, and collector number.
+- CIO disposition: prior broad implementation language is qualified; no robust
+  or meticulous claim is eligible for the current vertical slice.
+- SSAC disposition: `ADMIT_QUALIFIED` for a revised target architecture;
+  preserve the existing implementation and evidence as a laboratory baseline.
+- Created the specific target application architecture, construction dependency
+  order, measurable truth conditions, and current-to-target delta in
+  `docs/architecture/ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md`.
