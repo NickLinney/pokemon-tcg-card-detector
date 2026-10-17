@@ -34,4 +34,3 @@ The commissioned outcome is a functioning, reproducible, evidence-preserving
 sample vertical slice. It may end with unresolved card identities or fields. It
 must not conceal uncertainty or claim professional grading, authentication,
 production readiness, broad compatibility, or unmeasured accuracy.
-

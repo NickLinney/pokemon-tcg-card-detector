@@ -9,4 +9,6 @@
 | R-005 | Open | Sleeve glare, skew, and low text resolution may defeat OCR. | Record quality and raw OCR; allow insufficient/ambiguous decisions. |
 | R-006 | Open | OCR model/data licensing may differ from EasyOCR code licensing. | Record code/model separately; do not redistribute downloaded weights. |
 | R-007 | Open | Required independent release/security/QA acceptance has not occurred. | Keep lifecycle experimental/unreleased; do not simulate approval. |
-
+| R-008 | EvidenceRequired | The referenced GitHub PAT file is absent, so the empty remote cannot be populated. | Preserve local commits; obtain an authorized credential, then push without rewriting history. |
+| R-009 | Open | No reviewed ground truth exists for the commissioned sample. | Report segmentation and decision-state facts only; do not report identification accuracy. |
+| R-010 | Open | VS1 reference imagery is unavailable from the pinned TCGdex snapshot. | Retain image matching as tested capability; do not claim sample image confirmation. |

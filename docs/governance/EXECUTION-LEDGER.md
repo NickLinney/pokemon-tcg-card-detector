@@ -29,9 +29,40 @@
 - Observed that the snapshot contains the Japanese VS1 series, with material
   Japanese-name quality problems that prevent name-only identity decisions.
 
-## Current next transition
+## 2026-10-17 — Repository and corpus execution
 
-Create the clean bootstrap commit on `main`, then develop and validate the
-vertical slice on a scoped feature branch. Do not tag or release unless the
-release checklist and evidence support a separate promotion event.
+- Created a clean governed bootstrap commit on `main` and moved implementation
+  to `feature/pre-alpha-1-vertical-slice`.
+- The designated GitHub repository was empty. Authentication failed before any
+  credential was received because the named PAT file is absent; no push or
+  release occurred.
+- Preserved two failed corpus builds as counterevidence: the first exposed a SQL
+  placeholder defect; the second exposed an upstream ID collision across source
+  scopes. Corrected the implementation rather than mutating the evidence.
+- Built the third corpus database with 42,055 records, zero import errors, and
+  SQLite integrity `ok`.
+- Downloaded EasyOCR detection and Japanese-recognition weights with system TLS,
+  then matched the checksums declared by EasyOCR. Kept weights outside Git.
 
+## 2026-10-17 — Vertical slice and validation
+
+- Implemented segmentation, template inheritance, OCR observations, local
+  candidate generation, discriminator planning, conservative decision policy,
+  evidence packages, and three inventory formats.
+- Preserved two preliminary sample runs while improving crop and title-zone
+  geometry. The final run is `run-5cc94e4d838f-3`.
+- Final run segmented 9/9 pockets and produced nine `AMBIGUOUS` decisions with
+  zero unsupported confirmations.
+- Corrected ORB similarity normalization after an identical-image test failed;
+  reran the expanded complete suite successfully: 12 passed.
+- Recorded architecture, ADRs, sources, dependencies/licenses, corpus manifest,
+  template taxonomy, implementation status, test results, sample evidence, and
+  release maturity.
+
+## Current disposition
+
+The requested local vertical slice is implemented and verified. Overall
+commission status remains `PARTIALLY COMPLETE`: remote publication lacks an
+authorized credential; reference-image confirmation and accuracy measurement
+lack required evidence; release acceptance is not authorized. Continue from the
+feature branch without tagging until those distinct gates are satisfied.
