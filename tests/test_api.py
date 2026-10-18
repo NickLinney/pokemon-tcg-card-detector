@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from ptcg.api import create_app
+from ptcg.evidence import ContentAddressedArtifactStore
+from ptcg.run_catalog import seal_artifact_index
 
 
 def _configured_app(tmp_path: Path, monkeypatch):
@@ -226,6 +228,31 @@ def test_cancel_is_idempotent_and_capacity_is_bounded(tmp_path: Path, monkeypatc
     repeated = client.post(cancel_url)
     assert repeated.status_code == 200
     assert repeated.get_json()["state"] == "CANCEL_REQUESTED"
+
+
+def test_run_and_artifact_enumeration_require_sealed_index(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    run = tmp_path / "runs" / "run-api-fixture"
+    run.mkdir(parents=True)
+    (run / "page-summary.json").write_text(
+        '{"run_state":"REVIEW_REQUIRED","run_manifest_id":"sha256:x","pipeline_version":"fixture","decision_counts":{}}',
+        encoding="utf-8",
+    )
+    client = app.test_client()
+    assert client.get("/v1/runs/run-api-fixture").status_code == 409
+    store = ContentAddressedArtifactStore(run / "artifacts")
+    ref = store.put_bytes(b"csv", media_type="text/csv", role="inventory-csv")
+    seal_artifact_index(
+        run,
+        [{**ref, "safe_filename": "inventory.csv", "downloadable": True}],
+    )
+    response = client.get("/v1/runs/run-api-fixture")
+    assert response.status_code == 200
+    assert response.get_json()["artifact_count"] == 1
+    listed = client.get("/v1/runs/run-api-fixture/artifacts")
+    assert listed.status_code == 200
+    assert listed.get_json()["artifacts"][0]["role"] == "inventory-csv"
+    assert client.get("/v1/runs/run-missing").status_code == 404
 
 
 def bytes_io(value: bytes):

@@ -447,6 +447,7 @@ def _verify_completed_run(result: dict[str, Any]) -> None:
         raise ValueError("analysis run_id does not match run directory")
     for name in (
         "run-manifest.json",
+        "artifact-index.json",
         "page-summary.json",
         "inventory.csv",
         "inventory.jsonl",

@@ -50,6 +50,19 @@ def verify_run(run_directory: Path) -> dict[str, Any]:
         payload = _load_json(path, findings)
         referenced_artifacts.update(_artifact_digests(payload))
     referenced_artifacts.update(_artifact_digests(manifest))
+    artifact_index_path = run_directory / "artifact-index.json"
+    if artifact_index_path.is_file():
+        artifact_index = _load_json(artifact_index_path, findings)
+        recorded_index_id = artifact_index.get("artifact_index_id")
+        unsigned_index = {
+            key: value for key, value in artifact_index.items() if key != "artifact_index_id"
+        }
+        expected_index_id = f"sha256:{canonical_json_sha256(unsigned_index)}"
+        if recorded_index_id != expected_index_id:
+            findings.append(
+                _finding("ARTIFACT_INDEX_ID_MISMATCH", "artifact index identity is invalid")
+            )
+        referenced_artifacts.update(_artifact_digests(artifact_index))
     stored_artifacts = {path.name for path in artifact_files if path.is_file()}
     for digest in sorted(referenced_artifacts - stored_artifacts):
         findings.append(
