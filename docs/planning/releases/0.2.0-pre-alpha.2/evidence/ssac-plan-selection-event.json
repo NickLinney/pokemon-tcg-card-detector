@@ -1,0 +1,25 @@
+{
+  "event_type": "PLAN_OR_STRATEGY_SELECTION",
+  "subject": {
+    "type": "Strategy",
+    "identity": "pokemon-tcg-card-detector:0.2.0-pre-alpha.2-release-development-plan"
+  },
+  "signals": {
+    "components_coevolve": true,
+    "reciprocal_coordination_verified": true,
+    "safe_parallel_work_exists": true,
+    "skill_or_strategy_mismatch": false,
+    "unapproved_scope_expansion": false
+  },
+  "evidence_refs": [
+    "sha256:95f9cfb4ac81540d677e17be2b5085440bbc3ab341aa431809747d48b860298f",
+    "git:6f4003150d7703f87ee07dd23a810afd062b033f",
+    "uat:UAT-14",
+    "uat:UAT-15",
+    "architecture:ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE"
+  ],
+  "scope": "Local planning artifacts and a future governed 0.2.0-pre-alpha.2 release increment",
+  "authority": "Commissioner request authorizes project-space inspection and release-plan construction; implementation and release decisions remain gated",
+  "baseline": "Unreleased Pre-Alpha feature branch at 6f4003150d7703f87ee07dd23a810afd062b033f",
+  "commentary": "Templates, zones, extraction, review, evaluation, jobs, and release evidence co-evolve through bounded contracts; safe plan construction may continue while independent release gates remain open."
+}

@@ -1,0 +1,30 @@
+{
+  "status": "CANDIDATE_RULES_MATCHED",
+  "disposition": "DEFER",
+  "matched_rule_ids": ["SA-01", "SA-08", "ST-08"],
+  "advisory_only": true,
+  "limitations": [
+    "Flags/evidence not independently validated; other governing controls remain in force"
+  ],
+  "unverified": [
+    "Actual authority and baseline identity",
+    "Causal correctness and omitted signals"
+  ],
+  "rule_advisories": [
+    {
+      "id": "SA-01",
+      "disposition": "DEFER",
+      "rationale": "Agility means evidence-bound adaptation with continuity."
+    },
+    {
+      "id": "SA-08",
+      "disposition": "ADMIT_QUALIFIED",
+      "rationale": "Learning must remain epistemically qualified."
+    },
+    {
+      "id": "ST-08",
+      "disposition": "DEFER",
+      "rationale": "Accepted state change may invalidate downstream conclusions."
+    }
+  ]
+}

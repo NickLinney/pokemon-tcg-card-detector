@@ -1,0 +1,25 @@
+{
+  "status": "CANDIDATE_RULES_MATCHED",
+  "disposition": "ADMIT_QUALIFIED",
+  "matched_rule_ids": ["RI-02", "SA-02"],
+  "advisory_only": true,
+  "limitations": [
+    "Flags/evidence not independently validated; other governing controls remain in force"
+  ],
+  "unverified": [
+    "Actual authority and baseline identity",
+    "Causal correctness and omitted signals"
+  ],
+  "rule_advisories": [
+    {
+      "id": "RI-02",
+      "disposition": "ADMIT_QUALIFIED",
+      "rationale": "Mutual business dependence may be legitimate."
+    },
+    {
+      "id": "SA-02",
+      "disposition": "ADMIT_QUALIFIED",
+      "rationale": "Reciprocity is a coordination strategy, not subtype identity."
+    }
+  ]
+}

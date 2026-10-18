@@ -1,0 +1,30 @@
+{
+  "status": "CANDIDATE_RULES_MATCHED",
+  "disposition": "ESCALATE",
+  "matched_rule_ids": ["ST-06", "ST-07", "CL-03"],
+  "advisory_only": true,
+  "limitations": [
+    "Flags/evidence not independently validated; other governing controls remain in force"
+  ],
+  "unverified": [
+    "Actual authority and baseline identity",
+    "Causal correctness and omitted signals"
+  ],
+  "rule_advisories": [
+    {
+      "id": "ST-06",
+      "disposition": "ESCALATE",
+      "rationale": "Construction and promotion are distinct events."
+    },
+    {
+      "id": "ST-07",
+      "disposition": "ADMIT_QUALIFIED",
+      "rationale": "A candidacy can close without promotion."
+    },
+    {
+      "id": "CL-03",
+      "disposition": "ESCALATE",
+      "rationale": "Authority-aware collaboration does not invent actors."
+    }
+  ]
+}
