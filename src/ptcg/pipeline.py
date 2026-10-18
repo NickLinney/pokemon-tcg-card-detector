@@ -28,6 +28,7 @@ from .vision import (
     load_image,
     visual_features,
 )
+from .workflow import default_sample_context, location_id, validate_collection_context
 
 
 PIPELINE_VERSION = "pre-alpha-evidence-architecture-v7"
@@ -49,12 +50,14 @@ def analyze_page(
     ocr_provider: OCRProvider,
     *,
     idempotency_key: str | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     image_path = image_path.resolve(strict=True)
     database_path = database_path.resolve(strict=True)
     template_root = template_root.resolve(strict=True)
     source_hash = sha256_file(image_path)
     database_hash = sha256_file(database_path)
+    context = validate_collection_context(context) if context is not None else default_sample_context()
 
     registry = TemplateRegistry(template_root)
     template_findings = registry.validate()
@@ -68,6 +71,7 @@ def analyze_page(
         "network_acquisition": False,
         "automatic_confirmation": False,
         "zone_crop_policy": "all-declared-applicable-priors",
+        "collection_context": context,
     }
     manifest = RunManifest.build(
         source_sha256=source_hash,
@@ -324,10 +328,11 @@ def analyze_page(
             )
             inventory_rows.append(
                 {
-                    "collection_id": "sample-collection",
-                    "binder_id": "sample-binder",
-                    "page_id": source_hash[:12],
+                    "collection_id": context["collection_id"],
+                    "binder_id": context["binder_id"],
+                    "page_id": context["page_id"],
                     "pocket_index": detected.pocket_index,
+                    "location_id": location_id(context, detected.pocket_index),
                     "canonical_reference_id": decision["selected_reference_card_id"],
                     "display_name": selected.get("display_name") if selected else None,
                     "set_id": selected.get("set_id") if selected else None,
@@ -368,6 +373,7 @@ def analyze_page(
             "run_state": ledger.state,
             "run_manifest_id": manifest.payload["manifest_id"],
             "pipeline_version": PIPELINE_VERSION,
+            "collection_context": context,
             "source": {
                 "artifact": source_artifact,
                 "sha256": source_hash,

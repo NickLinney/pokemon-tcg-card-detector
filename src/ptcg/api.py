@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -11,10 +12,12 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from .pipeline import PIPELINE_VERSION
+from .jobs import IdempotencyConflict, JobNotFound, JobService, JobStore
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
-from .util import ensure_write_path, project_root
+from .util import canonical_json_sha256, ensure_write_path, project_root
 from .version import version_metadata
+from .workflow import validate_collection_context
 
 
 ALLOWED_IMAGE_SUFFIXES = {".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
@@ -36,12 +39,29 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         MODEL_DIRECTORY=os.environ.get(
             "PTCG_MODEL_DIRECTORY", str(root / ".models" / "easyocr")
         ),
+        JOB_DATABASE=os.environ.get(
+            "PTCG_JOB_DATABASE", str(root / ".local" / "jobs" / "jobs.sqlite3")
+        ),
+        JOB_WORKERS=int(os.environ.get("PTCG_JOB_WORKERS", "1")),
         MAX_CONTENT_LENGTH=int(
             os.environ.get("PTCG_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
         ),
     )
     if config:
         app.config.update(config)
+
+    job_store = JobStore(Path(app.config["JOB_DATABASE"]))
+    app.extensions["ptcg_job_store"] = job_store
+    app.extensions["ptcg_job_service"] = JobService(
+        job_store,
+        analyze_page_request,
+        database_path=Path(app.config["DATABASE_PATH"]) if app.config.get("DATABASE_PATH") else Path("."),
+        template_root=Path(app.config["TEMPLATE_ROOT"]),
+        output_root=Path(app.config["OUTPUT_ROOT"]),
+        ocr_mode=app.config["OCR_MODE"],
+        model_directory=Path(app.config["MODEL_DIRECTORY"]),
+        download_ocr_models=bool(app.config["DOWNLOAD_OCR_MODELS"]),
+    )
 
     @app.get("/healthz")
     def health() -> tuple[Any, int]:
@@ -107,7 +127,81 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return jsonify(error="analysis_failed", request_id=request_id), 500
         return jsonify(request_id=request_id, result=result), 200
 
+    @app.post("/v1/analysis-jobs")
+    def create_analysis_job() -> tuple[Any, int]:
+        findings = _readiness_findings(app)
+        if findings:
+            return jsonify(error="service_not_ready", findings=findings), 503
+        uploaded = request.files.get("image")
+        if uploaded is None or not uploaded.filename:
+            return jsonify(error="missing_image", message="multipart field 'image' is required"), 400
+        filename = secure_filename(uploaded.filename)
+        suffix = Path(filename).suffix.lower()
+        if suffix not in ALLOWED_IMAGE_SUFFIXES:
+            return jsonify(error="unsupported_image_type", allowed=sorted(ALLOWED_IMAGE_SUFFIXES)), 415
+        idempotency_key = request.headers.get("Idempotency-Key")
+        if idempotency_key is None or not 1 <= len(idempotency_key) <= 256:
+            return jsonify(
+                error="invalid_idempotency_key",
+                message="Idempotency-Key must contain between 1 and 256 characters",
+            ), 400
+        try:
+            context = validate_collection_context(
+                {
+                    "collection_id": request.form.get("collection_id"),
+                    "binder_id": request.form.get("binder_id"),
+                    "page_id": request.form.get("page_id")
+                    or f"page-{canonical_json_sha256({'idempotency_key': idempotency_key})[:12]}",
+                    "source_captured_at": request.form.get("source_captured_at"),
+                }
+            )
+        except ValueError as exc:
+            return jsonify(error="invalid_collection_context", message=str(exc)), 400
+
+        request_id = uuid4().hex
+        request_directory = ensure_write_path(Path(app.config["UPLOAD_ROOT"]) / request_id)
+        request_directory.mkdir(parents=True, exist_ok=False)
+        image_path = request_directory / f"source{suffix}"
+        uploaded.save(image_path)
+        try:
+            job, created = job_store.create_or_get(
+                source_path=image_path,
+                context=context,
+                idempotency_key=idempotency_key,
+            )
+        except IdempotencyConflict as exc:
+            return jsonify(error="idempotency_conflict", message=str(exc)), 409
+        if created:
+            _launch_job(app, job["job_id"])
+        response = dict(job)
+        response["status_url"] = f"/v1/analysis-jobs/{job['job_id']}"
+        response["idempotent_replay"] = not created
+        return jsonify(response), 202
+
+    @app.get("/v1/analysis-jobs/<job_id>")
+    def get_analysis_job(job_id: str) -> tuple[Any, int]:
+        try:
+            job = job_store.get(job_id)
+        except JobNotFound:
+            return jsonify(error="job_not_found"), 404
+        response = dict(job)
+        response["transitions"] = job_store.transitions(job_id)
+        if job["run_id"]:
+            response["run_url"] = f"/v1/runs/{job['run_id']}"
+        return jsonify(response), 200
+
     return app
+
+
+def _launch_job(app: Flask, job_id: str) -> None:
+    executor = app.extensions.get("ptcg_job_executor")
+    if executor is None:
+        executor = ThreadPoolExecutor(
+            max_workers=int(app.config["JOB_WORKERS"]),
+            thread_name_prefix="ptcg-job",
+        )
+        app.extensions["ptcg_job_executor"] = executor
+    executor.submit(app.extensions["ptcg_job_service"].run, job_id)
 
 
 def _readiness_findings(app: Flask) -> list[str]:

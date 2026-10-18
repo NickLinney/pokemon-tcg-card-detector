@@ -6,6 +6,7 @@ from typing import Any
 from .ocr import EasyOCRProvider, NullOCRProvider, OCRProvider
 from .pipeline import analyze_page
 from .util import project_root
+from .workflow import validate_collection_context
 
 
 def build_ocr_provider(
@@ -33,6 +34,7 @@ def analyze_page_request(
     download_ocr_models: bool = False,
     model_directory: Path | None = None,
     idempotency_key: str | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute page analysis for CLI, HTTP, or an importing Python process."""
     provider = build_ocr_provider(
@@ -47,4 +49,5 @@ def analyze_page_request(
         output_parent,
         provider,
         idempotency_key=idempotency_key,
+        context=validate_collection_context(context) if context is not None else None,
     )

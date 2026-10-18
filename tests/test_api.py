@@ -4,6 +4,7 @@ from ptcg.api import create_app
 
 
 def _configured_app(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PTCG_PROJECT_ROOT", str(tmp_path))
     database = tmp_path / "cards.sqlite3"
     database.write_bytes(b"fixture")
     template_root = Path(__file__).parents[1] / "templates"
@@ -14,10 +15,10 @@ def _configured_app(tmp_path: Path, monkeypatch):
             "TEMPLATE_ROOT": str(template_root),
             "OUTPUT_ROOT": str(tmp_path / "runs"),
             "UPLOAD_ROOT": str(tmp_path / "uploads"),
+            "JOB_DATABASE": str(tmp_path / "jobs" / "jobs.sqlite3"),
             "OCR_MODE": "none",
         }
     )
-    monkeypatch.setenv("PTCG_PROJECT_ROOT", str(tmp_path))
     return app
 
 
@@ -108,6 +109,87 @@ def test_analysis_uses_shared_service_and_preserves_upload(tmp_path: Path, monke
     assert observed["image_path"].read_bytes() == b"not-a-real-image"
     assert observed["kwargs"]["ocr_mode"] == "none"
     assert observed["kwargs"]["idempotency_key"] == "fixture-request"
+
+
+def test_async_submission_returns_durable_job_and_replays_idempotently(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    launched = []
+    monkeypatch.setattr("ptcg.api._launch_job", lambda _app, job_id: launched.append(job_id))
+    client = app.test_client()
+
+    def submit():
+        return client.post(
+            "/v1/analysis-jobs",
+            data={
+                "image": (bytes_io(b"fixture-image"), "binder.jpeg"),
+                "collection_id": "collection-1",
+                "binder_id": "binder-1",
+                "page_id": "page-1",
+            },
+            content_type="multipart/form-data",
+            headers={"Idempotency-Key": "request-1"},
+        )
+
+    first = submit()
+    assert first.status_code == 202
+    assert first.get_json()["state"] == "ADMITTED"
+    assert first.get_json()["idempotent_replay"] is False
+    assert launched == [first.get_json()["job_id"]]
+
+    replay = submit()
+    assert replay.status_code == 202
+    assert replay.get_json()["job_id"] == first.get_json()["job_id"]
+    assert replay.get_json()["idempotent_replay"] is True
+    assert launched == [first.get_json()["job_id"]]
+
+    status = client.get(first.get_json()["status_url"])
+    assert status.status_code == 200
+    assert [item["to_state"] for item in status.get_json()["transitions"]] == [
+        "REQUESTED",
+        "ADMITTED",
+    ]
+
+
+def test_async_submission_rejects_conflicting_idempotency_key(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    monkeypatch.setattr("ptcg.api._launch_job", lambda _app, job_id: None)
+    client = app.test_client()
+    base = {
+        "collection_id": "collection-1",
+        "binder_id": "binder-1",
+        "page_id": "page-1",
+    }
+    first = client.post(
+        "/v1/analysis-jobs",
+        data={**base, "image": (bytes_io(b"first"), "binder.jpeg")},
+        content_type="multipart/form-data",
+        headers={"Idempotency-Key": "same-key"},
+    )
+    assert first.status_code == 202
+    conflict = client.post(
+        "/v1/analysis-jobs",
+        data={**base, "image": (bytes_io(b"different"), "binder.jpeg")},
+        content_type="multipart/form-data",
+        headers={"Idempotency-Key": "same-key"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.get_json()["error"] == "idempotency_conflict"
+
+
+def test_async_submission_rejects_context_paths(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    response = app.test_client().post(
+        "/v1/analysis-jobs",
+        data={
+            "image": (bytes_io(b"fixture"), "binder.jpeg"),
+            "collection_id": "../escape",
+            "binder_id": "binder-1",
+        },
+        content_type="multipart/form-data",
+        headers={"Idempotency-Key": "request-1"},
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_collection_context"
 
 
 def bytes_io(value: bytes):
