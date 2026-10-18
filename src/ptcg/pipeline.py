@@ -19,6 +19,7 @@ from .localization import (
 )
 from .ocr import OCRProvider, classify_script, parse_collector_number, parse_hp
 from .run_control import RunLedger, RunManifest
+from .run_catalog import seal_artifact_index
 from .store import ReferenceStore
 from .template_registry import TemplateRegistry, crop_zone
 from .util import ensure_write_path, sha256_file, unique_path, utc_now, write_json_new
@@ -437,6 +438,36 @@ def analyze_page(
         summary_path = write_json_new(run_directory / "page-summary.json", summary)
         cancel_check()
         _write_inventory(run_directory, inventory_rows)
+        indexed_artifacts = [
+            {
+                **source_artifact,
+                "safe_filename": f"source{image_path.suffix.lower()}",
+                "downloadable": True,
+            }
+        ]
+        for path, media_type, role in (
+            (summary_path, "application/json", "page-summary"),
+            (run_directory / "inventory.csv", "text/csv", "inventory-csv"),
+            (run_directory / "inventory.jsonl", "application/x-ndjson", "inventory-jsonl"),
+            (run_directory / "inventory.sqlite3", "application/vnd.sqlite3", "inventory-sqlite"),
+        ):
+            indexed_artifacts.append(
+                {
+                    **artifacts.put_file(path, media_type=media_type, role=role),
+                    "safe_filename": path.name,
+                    "downloadable": True,
+                }
+            )
+        for package in card_packages:
+            pocket = package["card_face_observation"]["pocket_index"]
+            indexed_artifacts.append(
+                {
+                    **package["evidence_payload_artifact"],
+                    "safe_filename": f"pocket-{pocket:02d}-evidence.json",
+                    "downloadable": True,
+                }
+            )
+        seal_artifact_index(run_directory, indexed_artifacts)
         summary["run_directory"] = str(run_directory)
         summary["summary_path"] = str(summary_path)
         return summary

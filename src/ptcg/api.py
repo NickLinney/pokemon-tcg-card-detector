@@ -12,6 +12,12 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from .pipeline import PIPELINE_VERSION
+from .run_catalog import (
+    ArtifactIntegrityFailure,
+    RunCatalog,
+    RunNotFound,
+    RunNotSealed,
+)
 from .jobs import CapacityExceeded, IdempotencyConflict, JobNotFound, JobService, JobStore
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
@@ -54,6 +60,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
 
     job_store = JobStore(Path(app.config["JOB_DATABASE"]))
     app.extensions["ptcg_job_store"] = job_store
+    run_catalog = RunCatalog(Path(app.config["OUTPUT_ROOT"]))
+    app.extensions["ptcg_run_catalog"] = run_catalog
     app.extensions["ptcg_job_service"] = JobService(
         job_store,
         analyze_page_request,
@@ -208,6 +216,29 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         response = dict(job)
         response["status_url"] = f"/v1/analysis-jobs/{job_id}"
         return jsonify(response), 200
+
+    @app.get("/v1/runs/<run_id>")
+    def get_run(run_id: str) -> tuple[Any, int]:
+        try:
+            return jsonify(run_catalog.summary(run_id)), 200
+        except RunNotFound:
+            return jsonify(error="run_not_found"), 404
+        except RunNotSealed:
+            return jsonify(error="run_not_sealed"), 409
+        except ArtifactIntegrityFailure as exc:
+            return jsonify(error="run_integrity_failure", message=str(exc)), 409
+
+    @app.get("/v1/runs/<run_id>/artifacts")
+    def list_run_artifacts(run_id: str) -> tuple[Any, int]:
+        try:
+            index = run_catalog.artifacts(run_id)
+        except RunNotFound:
+            return jsonify(error="run_not_found"), 404
+        except RunNotSealed:
+            return jsonify(error="run_not_sealed"), 409
+        except ArtifactIntegrityFailure as exc:
+            return jsonify(error="run_integrity_failure", message=str(exc)), 409
+        return jsonify(index), 200
 
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
         _launch_job(app, job_id)
