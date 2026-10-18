@@ -83,3 +83,27 @@ def test_review_indexing_is_idempotent(tmp_path: Path, monkeypatch):
     store = ReviewStore(tmp_path / "reviews.sqlite3")
     assert store.index_run(run) == store.index_run(run)
     assert store.list()["total"] == 1
+
+
+def test_disposition_is_attributable_append_only_and_candidate_bound(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PTCG_PROJECT_ROOT", str(tmp_path))
+    store = ReviewStore(tmp_path / "reviews.sqlite3")
+    review_id = store.index_run(build_review_run(tmp_path))[0]
+    evidence_version = store.get(review_id)["evidence_version"]
+    disposition = store.append_disposition(
+        review_id,
+        actor_id="local:reviewer-1",
+        authority_scope="collection-1",
+        payload={
+            "action": "SELECT_CANDIDATE",
+            "reason": "Reviewed evidence supports the candidate.",
+            "identity_assertion": {"reference_card_id": "tcgdex:sv1:001"},
+            "printing_assertion": None,
+            "field_correction": None,
+            "evidence_version": evidence_version,
+            "expected_prior_assertion": None,
+        },
+    )
+    assert disposition["disposition_id"].startswith("sha256:")
+    assert store.get(review_id)["state"] == "RESOLVED"
+    assert store.dispositions(review_id) == [disposition]
