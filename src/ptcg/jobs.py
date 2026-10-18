@@ -27,6 +27,16 @@ class IllegalJobTransition(ValueError):
     pass
 
 
+class CapacityExceeded(RuntimeError):
+    def __init__(self, retry_after: int = 5):
+        super().__init__("local analysis capacity is currently full")
+        self.retry_after = retry_after
+
+
+class AnalysisCanceled(RuntimeError):
+    pass
+
+
 ALLOWED_JOB_TRANSITIONS = {
     "REQUESTED": {"ADMITTED", "REJECTED"},
     "ADMITTED": {"RUNNING", "CANCEL_REQUESTED", "REJECTED", "RECOVERY_REQUIRED"},
@@ -54,6 +64,7 @@ class JobStore:
         source_path: Path,
         context: dict[str, Any],
         idempotency_key: str,
+        max_active_jobs: int | None = None,
     ) -> tuple[dict[str, Any], bool]:
         context = validate_collection_context(context)
         source_path = source_path.resolve(strict=True)
@@ -75,6 +86,16 @@ class JobStore:
                         "Idempotency-Key was already used with different input or context"
                     )
                 return self._public(job), False
+
+            if max_active_jobs is not None:
+                active = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM analysis_jobs
+                    WHERE state IN ('ADMITTED', 'RUNNING', 'CANCEL_REQUESTED', 'RECOVERY_REQUIRED')
+                    """
+                ).fetchone()[0]
+                if active >= max_active_jobs:
+                    raise CapacityExceeded()
 
             job_id = f"job-{uuid4().hex}"
             connection.execute(
@@ -147,6 +168,21 @@ class JobStore:
                 (job_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def cancel(self, job_id: str) -> dict[str, Any]:
+        job = self.get(job_id, internal=True)
+        if job["state"] in {"SUCCEEDED", "FAILED", "CANCELED", "REJECTED"}:
+            return self._public(job)
+        if job["state"] != "CANCEL_REQUESTED":
+            return self.transition(
+                job_id,
+                "CANCEL_REQUESTED",
+                reason="operator requested bounded cancellation",
+            )
+        return self._public(job)
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        return self.get(job_id, internal=True)["state"] == "CANCEL_REQUESTED"
 
     def recover_interrupted(self) -> list[str]:
         """Move interrupted work to explicit recoverable states and return work to relaunch."""
@@ -344,6 +380,13 @@ class JobService:
 
     def run(self, job_id: str) -> None:
         job = self.store.get(job_id, internal=True)
+        if job["state"] == "CANCEL_REQUESTED":
+            self.store.transition(
+                job_id, "CANCELED", reason="worker observed cancellation before execution"
+            )
+            return
+        if job["state"] in {"CANCELED", "SUCCEEDED", "FAILED", "REJECTED"}:
+            return
         self.store.transition(job_id, "RUNNING", reason="worker claimed admitted job")
         try:
             result = self.analyzer(
@@ -356,7 +399,15 @@ class JobService:
                 model_directory=self.model_directory,
                 idempotency_key=job["idempotency_key_sha256"],
                 context=job["context"],
+                cancel_check=lambda: self._raise_if_canceled(job_id),
             )
+        except AnalysisCanceled:
+            self.store.transition(
+                job_id,
+                "CANCELED",
+                reason="analysis stopped at a safe cancellation checkpoint",
+            )
+            return
         except Exception as exc:
             self.store.transition(
                 job_id,
@@ -381,6 +432,10 @@ class JobService:
             reason="run manifest and required outputs sealed",
             run_id=result["run_id"],
         )
+
+    def _raise_if_canceled(self, job_id: str) -> None:
+        if self.store.is_cancel_requested(job_id):
+            raise AnalysisCanceled("analysis cancellation requested")
 
 
 def _verify_completed_run(result: dict[str, Any]) -> None:

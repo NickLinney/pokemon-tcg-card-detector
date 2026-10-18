@@ -17,6 +17,7 @@ def _configured_app(tmp_path: Path, monkeypatch):
             "UPLOAD_ROOT": str(tmp_path / "uploads"),
             "JOB_DATABASE": str(tmp_path / "jobs" / "jobs.sqlite3"),
             "RECOVER_JOBS": False,
+            "MAX_ACTIVE_JOBS": 4,
             "OCR_MODE": "none",
         }
     )
@@ -191,6 +192,40 @@ def test_async_submission_rejects_context_paths(tmp_path: Path, monkeypatch):
     )
     assert response.status_code == 400
     assert response.get_json()["error"] == "invalid_collection_context"
+
+
+def test_cancel_is_idempotent_and_capacity_is_bounded(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    app.config["MAX_ACTIVE_JOBS"] = 1
+    monkeypatch.setattr("ptcg.api._launch_job", lambda _app, job_id: None)
+    client = app.test_client()
+
+    def submit(key: str):
+        return client.post(
+            "/v1/analysis-jobs",
+            data={
+                "image": (bytes_io(key.encode()), "binder.jpeg"),
+                "collection_id": "collection-1",
+                "binder_id": "binder-1",
+                "page_id": key,
+            },
+            content_type="multipart/form-data",
+            headers={"Idempotency-Key": key},
+        )
+
+    first = submit("page-1")
+    assert first.status_code == 202
+    overloaded = submit("page-2")
+    assert overloaded.status_code == 429
+    assert overloaded.headers["Retry-After"] == "5"
+
+    cancel_url = f"/v1/analysis-jobs/{first.get_json()['job_id']}:cancel"
+    canceled = client.post(cancel_url)
+    assert canceled.status_code == 200
+    assert canceled.get_json()["state"] == "CANCEL_REQUESTED"
+    repeated = client.post(cancel_url)
+    assert repeated.status_code == 200
+    assert repeated.get_json()["state"] == "CANCEL_REQUESTED"
 
 
 def bytes_io(value: bytes):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .ocr import EasyOCRProvider, NullOCRProvider, OCRProvider
 from .pipeline import analyze_page
@@ -35,6 +35,7 @@ def analyze_page_request(
     model_directory: Path | None = None,
     idempotency_key: str | None = None,
     context: dict[str, Any] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Execute page analysis for CLI, HTTP, or an importing Python process."""
     provider = build_ocr_provider(
@@ -50,4 +51,5 @@ def analyze_page_request(
         provider,
         idempotency_key=idempotency_key,
         context=validate_collection_context(context) if context is not None else None,
+        cancel_check=cancel_check,
     )
