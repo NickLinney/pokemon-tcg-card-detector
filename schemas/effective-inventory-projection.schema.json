@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "effective-inventory-projection-v1",
+  "type": "object",
+  "required": ["schema_version", "projection_id", "projection_version", "collection_id", "generated_at", "items"],
+  "properties": {
+    "schema_version": {"const": "effective-inventory-projection-v1"},
+    "projection_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "projection_version": {"const": "effective-inventory-projector-v1"},
+    "collection_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["location_id", "assertion_id", "effective_state"],
+        "properties": {
+          "location_id": {"type": "string"},
+          "assertion_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "effective_state": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

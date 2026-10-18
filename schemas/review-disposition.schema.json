@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review-disposition-v1",
+  "type": "object",
+  "required": ["schema_version", "disposition_id", "review_id", "actor_id", "authority_scope", "action", "reason", "evidence_version", "expected_prior_assertion", "occurred_at"],
+  "properties": {
+    "schema_version": {"const": "review-disposition-v1"},
+    "disposition_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "review_id": {"type": "string", "pattern": "^review-[0-9a-f]{64}$"},
+    "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$"},
+    "authority_scope": {"type": "string", "minLength": 1},
+    "action": {"enum": ["SELECT_CANDIDATE", "MANUAL_ASSERTION", "REJECT_ALL", "CORRECT_FIELD", "REQUEST_RECAPTURE", "LEAVE_UNRESOLVED"]},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "identity_assertion": {"type": ["object", "null"]},
+    "printing_assertion": {"type": ["object", "null"]},
+    "field_correction": {"type": ["object", "null"]},
+    "evidence_version": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "expected_prior_assertion": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "occurred_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

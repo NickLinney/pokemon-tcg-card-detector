@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collection-context-v1",
+  "type": "object",
+  "required": ["schema_version", "collection_id", "binder_id", "page_id"],
+  "properties": {
+    "schema_version": {"const": "collection-context-v1"},
+    "collection_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "binder_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "page_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "source_captured_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "additionalProperties": false
+}
