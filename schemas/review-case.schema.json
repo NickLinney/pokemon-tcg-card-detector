@@ -11,7 +11,12 @@
     "state": {"enum": ["REQUIRED", "RESOLVED", "UNRESOLVED", "RECAPTURE_REQUESTED"]},
     "evidence_version": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "candidate_refs": {"type": "array", "items": {"type": "string"}},
-    "artifact_refs": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+    "artifact_refs": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}},
+    "decision": {"type": "object"},
+    "template_classification": {"type": "object"},
+    "zone_coverage": {"type": "object"},
+    "candidates": {"type": "array", "items": {"type": "object"}},
+    "limitations": {"type": "array", "items": {"type": "string"}}
   },
   "additionalProperties": false
 }

@@ -368,6 +368,7 @@ class JobService:
         ocr_mode: str,
         model_directory: Path,
         download_ocr_models: bool = False,
+        run_indexer: Callable[[Path], Any] | None = None,
     ):
         self.store = store
         self.analyzer = analyzer
@@ -377,6 +378,7 @@ class JobService:
         self.ocr_mode = ocr_mode
         self.model_directory = model_directory
         self.download_ocr_models = download_ocr_models
+        self.run_indexer = run_indexer
 
     def run(self, job_id: str) -> None:
         job = self.store.get(job_id, internal=True)
@@ -418,6 +420,8 @@ class JobService:
             return
         try:
             _verify_completed_run(result)
+            if self.run_indexer is not None:
+                self.run_indexer(Path(result["run_directory"]))
         except Exception as exc:
             self.store.transition(
                 job_id,
