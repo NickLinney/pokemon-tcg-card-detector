@@ -108,3 +108,78 @@ class GroundTruthRegistry:
 
 def _finding(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+def score_template_classification(
+    registry: GroundTruthRegistry,
+    predictions: list[dict[str, Any]],
+    *,
+    split: str = "evaluation",
+    top_k: int = 3,
+    minimum_stratum_size: int = 5,
+    template_registry_version: str,
+) -> dict[str, Any]:
+    """Measure ranked template hypotheses without treating scores as calibrated."""
+    fixtures = registry.qualified(split=split, permitted_use="EVALUATION")
+    by_id = {item["fixture_id"]: item for item in fixtures}
+    prediction_by_id = {item["fixture_id"]: item for item in predictions}
+    evaluated = 0
+    family_hits = 0
+    subtype_hits = 0
+    subtype_total = 0
+    abstentions = 0
+    confusion: dict[str, dict[str, int]] = {}
+    strata: dict[str, dict[str, int]] = {}
+    missing: list[str] = []
+    for fixture_id, fixture in by_id.items():
+        prediction = prediction_by_id.get(fixture_id)
+        if prediction is None:
+            missing.append(fixture_id)
+            continue
+        truth = fixture.get("truth", {})
+        expected_family = truth.get("template_family")
+        expected_subtype = truth.get("template_subtype")
+        ranked = prediction.get("family_top_k", [])[:top_k]
+        selected_family = prediction.get("selected_family")
+        selected_subtype = prediction.get("selected_subtype")
+        abstained = bool(prediction.get("abstained"))
+        evaluated += 1
+        family_hits += int(expected_family in ranked)
+        abstentions += int(abstained)
+        observed = "ABSTAIN" if abstained else str(selected_family)
+        confusion.setdefault(str(expected_family), {})[observed] = (
+            confusion.setdefault(str(expected_family), {}).get(observed, 0) + 1
+        )
+        if expected_subtype is not None:
+            subtype_total += 1
+            subtype_hits += int(selected_subtype == expected_subtype)
+        stratum = str(truth.get("stratum", expected_family or "UNKNOWN"))
+        bucket = strata.setdefault(stratum, {"count": 0, "family_top_k_hits": 0})
+        bucket["count"] += 1
+        bucket["family_top_k_hits"] += int(expected_family in ranked)
+    stratum_results = {}
+    for name, bucket in sorted(strata.items()):
+        count = bucket["count"]
+        stratum_results[name] = {
+            **bucket,
+            "family_top_k_recall": bucket["family_top_k_hits"] / count,
+            "evidence_state": (
+                "MEASURED" if count >= minimum_stratum_size else "EVIDENCE_REQUIRED"
+            ),
+        }
+    return {
+        "schema_version": "template-classification-scorecard-v1",
+        "registry_id": registry.payload.get("registry_id"),
+        "fixture_split": split,
+        "template_registry_version": template_registry_version,
+        "top_k": top_k,
+        "evaluated": evaluated,
+        "missing_predictions": sorted(missing),
+        "family_top_k_recall": family_hits / evaluated if evaluated else None,
+        "subtype_accuracy": subtype_hits / subtype_total if subtype_total else None,
+        "abstention_rate": abstentions / evaluated if evaluated else None,
+        "confusion": confusion,
+        "strata": stratum_results,
+        "calibration_state": "UNCALIBRATED",
+        "claim_state": "EVIDENCE_REQUIRED" if missing or not evaluated else "MEASURED",
+    }
