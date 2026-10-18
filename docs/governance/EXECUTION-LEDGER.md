@@ -99,3 +99,31 @@ feature branch without tagging until those distinct gates are satisfied.
 - Created the specific target application architecture, construction dependency
   order, measurable truth conditions, and current-to-target delta in
   `docs/architecture/ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md`.
+
+## 2026-10-18 — Remote provenance governance correction
+
+- Trigger: the Commissioner identified that local implementation completion
+  had been reported without sufficiently prominent treatment of the blocked
+  remote-publication obligation.
+- Prior state preserved: local development, testing, UAT, and candidate branch
+  construction were valid; remote publication remained incomplete because the
+  fine-grained GitHub PAT was missing.
+- Corrective authority: the Commissioner supplied `secrets/github_fg-pat.txt`
+  and explicitly authorized full Git reconciliation. The credential is mode
+  `0600`, remains outside the source repository, and was not printed or
+  committed.
+- Reconciliation performed: published `main`, every local feature/fix branch,
+  and the exact development DAG; created and reviewed PRs #1 through #25 in
+  first-parent order; advanced `dev` only to each pre-existing local commit;
+  then created reviewed promotion PRs #26 through #28 for
+  `dev -> test -> staging -> release/0.2.0`.
+- Provenance invariant: GitHub's recorded merge SHA for every PR matched the
+  expected local commit. No commit was squashed, recreated, rebased, omitted,
+  or force-pushed.
+- Review boundary: reviews were actual `COMMENTED` reviews by the repository
+  owner acting in the CIO governance role. They are non-independent and do not
+  satisfy QA, security, licensing, RG-0 through RG-6, tagging, publication, or
+  release authorization.
+- Ongoing correction: adopted the deferred-resource completion rule in
+  `BRANCHING-AND-PROMOTION.md`. This corrective feature must itself traverse
+  the same reviewed `feature -> dev -> test -> staging -> release/0.2.0` path.

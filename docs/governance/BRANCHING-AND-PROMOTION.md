@@ -29,5 +29,28 @@ required by RG-0 through RG-6.
 ## Current authority boundary
 
 Local feature development, verification, and branch construction are
-authorized. Tagging, remote publication, GitHub release creation, lifecycle
-promotion, and production merge are not authorized by this adaptation.
+authorized. The Commissioner's 2026-10-18 correction explicitly authorizes
+remote publication of the preserved branch graph plus genuine pull-request,
+review, merge, and environment-promotion records. Tagging, GitHub release
+creation, lifecycle promotion beyond the retained Pre-Alpha candidate, and
+production merge remain unauthorized.
+
+## Deferred-resource completion rule
+
+A required credential, service, actor, corpus, model, or other execution
+resource may be deferred while safe local work continues, but its dependent
+work item remains explicitly incomplete. Progress and completion reports must:
+
+- identify the deferred resource and the exact blocked transition prominently;
+- distinguish locally complete work from remote, reviewed, promoted, released,
+  or otherwise externally realized work;
+- retain an owner, next action, and completion condition for the blocked item;
+- never infer that an unattempted or credential-blocked transition was waived;
+- reconcile the deferred item through its substantive workflow when the
+  resource becomes available rather than merely editing its status text.
+
+For GitHub publication, local commits and branches do not satisfy remote
+provenance. Completion requires verified remote refs and, where governance
+requires review, actual pull-request and review objects bound to the exact
+commits. A review by the implementing account is recorded as non-independent
+and cannot satisfy an independent QA, security, licensing, or release gate.
