@@ -52,7 +52,9 @@ def analyze_page_request(
         output_parent,
         provider,
         idempotency_key=idempotency_key,
-        context=validate_collection_context(context) if context is not None else None,
+        collection_context=(
+            validate_collection_context(context) if context is not None else None
+        ),
         cancel_check=cancel_check,
         symbol_provider=symbol_provider,
     )
