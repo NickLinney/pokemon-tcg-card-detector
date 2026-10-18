@@ -1,0 +1,100 @@
+openapi: 3.1.0
+info:
+  title: Pokemon TCG Card Detector Local API
+  version: 0.1.0-pre-alpha.1
+  description: >-
+    Synchronous local integration adapter for the existing vertical slice.
+    This contract is not the target durable production job API.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Configured dependencies are usable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: One or more dependencies are not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+  /v1/pages/analyze:
+    post:
+      operationId: analyzePage
+      description: Synchronously analyze one uploaded binder-page or card image.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Analysis completed; result may legitimately abstain.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request_id, result]
+                properties:
+                  request_id: {type: string}
+                  result: {type: object, additionalProperties: true}
+        "400": {"$ref": "#/components/responses/Error"}
+        "413": {"$ref": "#/components/responses/Error"}
+        "415": {"$ref": "#/components/responses/Error"}
+        "500": {"$ref": "#/components/responses/Error"}
+        "503": {"$ref": "#/components/responses/Error"}
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, pipeline_version]
+      properties:
+        status: {const: ok}
+        pipeline_version: {type: string}
+    Readiness:
+      type: object
+      required: [status, findings]
+      properties:
+        status: {type: string, enum: [ready, not_ready]}
+        findings:
+          type: array
+          items: {type: string}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+        message: {type: string}
+        request_id: {type: string}
+        findings:
+          type: array
+          items: {type: string}
+  responses:
+    Error:
+      description: Request, dependency or processing error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

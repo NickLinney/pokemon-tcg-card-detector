@@ -22,10 +22,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==8.4.2"]
+api = [
+  "Flask==3.1.3",
+  "gunicorn==26.2.0",
+]
+test = [
+  "Flask==3.1.3",
+  "pytest==8.4.2",
+]
 
 [project.scripts]
 ptcg = "ptcg.cli:main"
+ptcg-api = "ptcg.api:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -36,4 +44,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-

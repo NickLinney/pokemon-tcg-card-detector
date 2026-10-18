@@ -52,6 +52,33 @@ PYTHONPATH=src ../.venv/bin/python -m ptcg page analyze \
 PYTHONPATH=src ../.venv/bin/python -m pytest -q
 ```
 
+The same analysis use case is available to Python callers through
+`ptcg.service.analyze_page_request`. An optional local Flask adapter is installed
+with the API extra:
+
+```bash
+../.venv/bin/python -m pip install -e '.[api]'
+PTCG_DATABASE=../.local/corpus/tcgdex-v2.48.0-r3.sqlite3 \
+  PYTHONPATH=src ../.venv/bin/python -m ptcg.api
+```
+
+It exposes `/healthz`, `/readyz`, and synchronous `/v1/pages/analyze`. It has no
+authentication and is for local Pre-Alpha integration only.
+
+## Containers
+
+One image supports both transports. The Compose API is published on loopback:
+
+```bash
+docker compose build
+docker compose up api
+docker compose run --rm cli template validate --root /opt/app/templates
+```
+
+The production-delivery plan, explicit nonclaims, work packages and release
+gates are in
+[`docs/planning/technical-project-plan-package/README.md`](docs/planning/technical-project-plan-package/README.md).
+
 Every analysis allocates a new run directory; prior evidence is not overwritten.
 The current commissioned evidence is documented in
 `docs/SAMPLE-RUN-REPORT.md`.

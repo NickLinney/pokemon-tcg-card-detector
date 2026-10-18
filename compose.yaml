@@ -1,0 +1,49 @@
+services:
+  api:
+    build:
+      context: .
+    image: pokemon-tcg-card-detector:local
+    entrypoint: ["gunicorn"]
+    command:
+      - "--bind=0.0.0.0:8080"
+      - "--workers=1"
+      - "--threads=2"
+      - "--timeout=600"
+      - "--no-control-socket"
+      - "ptcg.api:create_app()"
+    environment:
+      PTCG_DATABASE: /workspace/.local/corpus/tcgdex-v2.48.0-r3.sqlite3
+      PTCG_TEMPLATE_ROOT: /opt/app/templates
+      PTCG_OUTPUT_ROOT: /workspace/.local/runs
+      PTCG_UPLOAD_ROOT: /workspace/.local/uploads
+      PTCG_MODEL_DIRECTORY: /workspace/.models/easyocr
+      PTCG_DOWNLOAD_OCR_MODELS: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ../.local:/workspace/.local
+      - ../.models:/workspace/.models:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  cli:
+    profiles: ["tools"]
+    build:
+      context: .
+    image: pokemon-tcg-card-detector:local
+    environment:
+      PTCG_PROJECT_ROOT: /workspace
+    volumes:
+      - ../.local:/workspace/.local
+      - ../.models:/workspace/.models:ro
+      - ../binder-ingest-images:/workspace/input:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    command: ["template", "validate", "--root", "/opt/app/templates"]

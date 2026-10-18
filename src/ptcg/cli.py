@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
-from .ocr import EasyOCRProvider, NullOCRProvider
-from .pipeline import analyze_page
+from .service import analyze_page_request
 from .tcgdex import ingest_tcgdex, verify_database
 from .template_registry import TemplateRegistry
-from .util import project_root
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -57,14 +54,13 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
     elif args.command == "page" and args.page_command == "analyze":
-        model_directory = project_root() / ".models" / "easyocr"
-        provider = (
-            EasyOCRProvider(model_directory, download_enabled=args.download_ocr_models)
-            if args.ocr == "easyocr"
-            else NullOCRProvider()
-        )
-        result = analyze_page(
-            args.image, args.database, args.templates, args.output, provider
+        result = analyze_page_request(
+            args.image,
+            args.database,
+            args.templates,
+            args.output,
+            ocr_mode=args.ocr,
+            download_ocr_models=args.download_ocr_models,
         )
     else:  # pragma: no cover - argparse prevents this branch
         raise AssertionError("unreachable command")

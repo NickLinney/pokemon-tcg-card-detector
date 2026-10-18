@@ -1,5 +1,18 @@
 # Architecture Planning Artifact and Source Register
 
+## Production technical project plan package
+
+`technical-project-plan-package/` is the current delivery-planning baseline. It
+adds the interface, container, quality, security, data, operational, CI/CD,
+resourcing, RACI and evidence-bearing completion artifacts required to execute
+the robust architecture. Its application-readiness conclusion remains
+Pre-Alpha/not production-ready.
+
+Local distribution artifact:
+`Project/resources/generated/Pokemon-TCG-Production-Technical-Project-Plan-Package-0.1.0-pre-alpha.1.zip`
+with SHA-256
+`e9f7df83b9e03e7a8024da18d7a1a85a7d9b343b0dfae91e89254b9c631a3654`.
+
 Status: **evidence register for the planning packet**
 Scope: resources supplied in the architecture-planning request and repository
 artifacts used to derive the reports

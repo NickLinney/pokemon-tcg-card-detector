@@ -1,0 +1,16 @@
+6ae68ac5a6422a7714f7e2aecae997844c55948af65fccd13110405e788d962a  docs/planning/technical-project-plan-package/00-COMPLETENESS-ASSESSMENT-AND-CHARTER.md
+2be7571347d21c866ca41ab5ba718127b95bfa1cb752ad5248df05436f02dc12  docs/planning/technical-project-plan-package/01-SKILL-SELECTION-AND-CUSTOM-STRATEGY.md
+6b50dc1a7566ca964eca0df6e7a361b9cc78ca6c0ebb1d1e9ce422d75c865ece  docs/planning/technical-project-plan-package/02-PRODUCT-REQUIREMENTS-AND-SCOPE.md
+f2dc1863254f62f9dab6e54f0b42cd66051fbac09b63fe2c03f2dac0cdc2a7ce  docs/planning/technical-project-plan-package/03-APPLICATION-ARCHITECTURE-AND-EXECUTION-PROFILES.md
+6717ce3813ae506695133fcd3750264f5a19392e3699f45f82be6ceabeb4bb7d  docs/planning/technical-project-plan-package/04-INTERFACE-CONTRACTS.md
+7152c9f3b9e9320068ff4ecd54eaf9861fe05576b536b91d25cf1656150d60e5  docs/planning/technical-project-plan-package/05-WORK-BREAKDOWN-AND-CRITICAL-PATH.md
+463203d7a5c8c104b6e68e04f91da2e1621fd646c93eba865fb228636505e866  docs/planning/technical-project-plan-package/06-QUALITY-EVALUATION-AND-TEST-STRATEGY.md
+0e311a43c4426a8be219c2174994238e6f1fe37008de745092095dfbb4db5c8c  docs/planning/technical-project-plan-package/07-SECURITY-PRIVACY-AND-THREAT-MODEL.md
+76530c16fc8d57b844b9f815a7427b3e2d2bb78d90d4e49678a177a0f61bd136  docs/planning/technical-project-plan-package/08-DATA-CORPUS-AND-MIGRATION-PLAN.md
+95fc75edffeca7dc5ad393bce50f7b4d78568331dc36590f3ad8d94e5c2a8908  docs/planning/technical-project-plan-package/09-OPERATIONS-OBSERVABILITY-RECOVERY-AND-SLOS.md
+bb2c257b9e638507f22f7ffbd8a06b99fb63a9d9ea5005ac28fa9a068c41f7c9  docs/planning/technical-project-plan-package/10-CI-CD-RELEASE-AND-ENVIRONMENT-PLAN.md
+7d363219a8fbf95e5c23363d12a2eb7b75f24c43c3ed5798321bd31d6df020fb  docs/planning/technical-project-plan-package/11-DELIVERY-PLAN-RACI-RAID-AND-HUMAN-GATES.md
+2acb7aa99276b9046be6dcdd82f95c0086705caaeda46eb416bd9dd46a428f8f  docs/planning/technical-project-plan-package/12-TRACEABILITY-DEFINITION-OF-DONE-AND-AUDIT.md
+3f7203444b79f4aa8d385ff2f8c5d2585cc290a2415d6697ba2587c545f1bac9  docs/planning/technical-project-plan-package/13-VERIFICATION-RECORD.md
+444eb01709d624ae9b86830772d62fafb2b561ed00f80cd8581bbce4782a7053  docs/planning/technical-project-plan-package/README.md
+6b21fe0c323b7fd484ea5124ae0b3075a24a182ec87a18b9edc9b81e40f6c227  docs/planning/technical-project-plan-package/openapi.yaml
