@@ -6,6 +6,7 @@ from ptcg.evaluation import (
     score_template_classification,
     score_zone_localization,
     score_typed_extraction,
+    score_candidate_and_decision_safety,
 )
 
 
@@ -138,3 +139,56 @@ def test_typed_extraction_scorecard_keeps_unsupported_separate():
     assert scorecard["by_zone_type"]["text"]["typed_accuracy"] == 1.0
     assert scorecard["by_zone_type"]["set_symbol"]["unsupported_rate"] == 1.0
     assert scorecard["by_zone_type"]["rarity_symbol"]["no_signal_rate"] == 1.0
+
+
+def test_candidate_decision_scorecard_preserves_false_confirmation_gate():
+    first = fixture("candidate-1", "5" * 64)
+    first["truth"].update(canonical_reference_id="card-1", printing_id="printing-1")
+    second = fixture("candidate-2", "6" * 64)
+    second["truth"].update(canonical_reference_id="card-2", printing_id="printing-2")
+    registry = GroundTruthRegistry.build([first, second])
+    scorecard = score_candidate_and_decision_safety(
+        registry,
+        [
+            {
+                "fixture_id": "candidate-1",
+                "candidate_ids": ["card-1", "card-x"],
+                "decision_state": "PROBABLE",
+                "selected_reference_card_id": "card-1",
+                "selected_printing_id": None,
+            },
+            {
+                "fixture_id": "candidate-2",
+                "candidate_ids": ["card-x", "card-2"],
+                "decision_state": "AMBIGUOUS",
+                "selected_reference_card_id": None,
+                "selected_printing_id": None,
+            },
+        ],
+        top_k=2,
+    )
+    assert scorecard["candidate_top_k_recall"] == 1.0
+    assert scorecard["exact_identity_rate"] == 0.5
+    assert scorecard["exact_printing_rate"] == 0.0
+    assert scorecard["unresolved_rate"] == 1.0
+    assert scorecard["automatic_confirmation_policy_test"] == "PASS"
+    assert scorecard["threshold_adoption"] == "NOT_ADOPTED"
+
+
+def test_candidate_decision_scorecard_fails_when_automatic_confirmation_appears():
+    item = fixture("unsafe", "7" * 64)
+    item["truth"].update(canonical_reference_id="card-true")
+    scorecard = score_candidate_and_decision_safety(
+        GroundTruthRegistry.build([item]),
+        [
+            {
+                "fixture_id": "unsafe",
+                "candidate_ids": ["card-wrong"],
+                "decision_state": "CONFIRMED_AUTOMATIC",
+                "selected_reference_card_id": "card-wrong",
+                "selected_printing_id": None,
+            }
+        ],
+    )
+    assert scorecard["automatic_confirmation_policy_test"] == "FAIL"
+    assert scorecard["false_automatic_confirmation_rate"] == 1.0
