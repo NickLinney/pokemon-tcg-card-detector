@@ -1,0 +1,50 @@
+{
+  "schema_version": "project-plan-execution-status-v1",
+  "plan": {
+    "archive": "Pokemon-TCG-Production-Technical-Project-Plan-Package-0.1.0-pre-alpha.1.zip",
+    "sha256": "e9f7df83b9e03e7a8024da18d7a1a85a7d9b343b0dfae91e89254b9c631a3654"
+  },
+  "disposition": "QUALIFIED_IMPLEMENTATION_INCREMENT",
+  "lifecycle": "PRE_ALPHA_REVIEW_REQUIRED",
+  "implemented_capability_slices": [
+    "CAP-001",
+    "CAP-002",
+    "CAP-005",
+    "CAP-006",
+    "CAP-007",
+    "CAP-008",
+    "CAP-009",
+    "CAP-012",
+    "CAP-015"
+  ],
+  "sample_evidence": {
+    "run_id": "run-5cc94e4d838f-7394cd40",
+    "run_state": "REVIEW_REQUIRED",
+    "cards": 9,
+    "zone_records": 171,
+    "provisional_localized_zone_records": 139,
+    "extraction_states": {
+      "NO_SIGNAL": 117,
+      "SUCCEEDED": 9,
+      "UNSUPPORTED": 45
+    },
+    "automatic_confirmations": 0,
+    "verified_artifacts": 198,
+    "integrity_findings": 0,
+    "tests_passed": 35
+  },
+  "blocked_gates": [
+    "DR-001 accountable role acceptance",
+    "DR-002 taxonomy and zone semantic acceptance",
+    "DR-003 corpus and media rights acceptance",
+    "DR-005 metric threshold acceptance",
+    "WP-052 independent production review"
+  ],
+  "nonclaims": [
+    "not a complete execution of WP-001 through WP-052",
+    "not production ready",
+    "not independently approved",
+    "not released or deployed",
+    "not benchmark evidence of robust accuracy"
+  ]
+}

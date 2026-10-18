@@ -1,6 +1,6 @@
 # Robust Detection and Identification Application Architecture
 
-Status: **Target architecture candidate — not implemented**
+Status: **Target architecture candidate — partially realized in Pre-Alpha; not production-ready**
 
 Authority: Commissioner-requested CIO architecture definition
 
@@ -18,10 +18,13 @@ assessments, and a qualified decision. The system must retain every material
 intermediate object required to reproduce, challenge, supersede, or improve the
 decision.
 
-The current vertical slice is a useful laboratory prototype. It is not the
-architecture described here. In particular, its two-choice template predictor
-and three-zone runtime extraction are insufficient to support the words
-**robust and meticulous**.
+The original vertical slice was a useful laboratory prototype but was not the
+architecture described here. The 2026-10-17/18 successor increment adds sealed
+run control, content-addressed evidence, hierarchical hypotheses, an unknown
+escape, compiled zone semantics, and a distinct record for every declared zone.
+Its deterministic classifier and template-conditioned edge proposals remain
+uncalibrated baselines, so they are still insufficient to support the words
+**robust and meticulous** as current performance claims.
 
 ### CIO decision
 

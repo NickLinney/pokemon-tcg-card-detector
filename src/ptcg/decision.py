@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 
-POLICY_VERSION = "explicit-rules-v1"
+POLICY_VERSION = "explicit-rules-v2-uncalibrated"
+CALIBRATION_STATE = "EVIDENCE_REQUIRED"
 
 
 def decide(candidates: list[dict[str, Any]], quality: dict[str, float]) -> dict[str, Any]:
@@ -22,7 +23,9 @@ def decide(candidates: list[dict[str, Any]], quality: dict[str, float]) -> dict[
     if contradictions:
         state = "CONFLICTING_EVIDENCE"
     elif len(families) >= 2 and first["fused_score"] >= 0.88 and margin >= 0.15 and not low_quality:
-        state = "CONFIRMED_AUTOMATIC"
+        # The target architecture prohibits automatic confirmation until the
+        # policy is calibrated against an accepted held-out benchmark.
+        state = "PROBABLE"
     elif first["fused_score"] >= 0.62 and margin >= 0.1:
         state = "PROBABLE"
     elif margin < 0.1 and len(candidates) > 1:
@@ -37,6 +40,8 @@ def decide(candidates: list[dict[str, Any]], quality: dict[str, float]) -> dict[
     ]
     if low_quality:
         reasons.append("image quality gate not satisfied")
+    if state == "PROBABLE" and len(families) >= 2:
+        reasons.append("automatic confirmation disabled: calibration evidence required")
     reasons.extend(contradictions)
     return _decision(state, selected, first["fused_score"], reasons, margin)
 
@@ -55,6 +60,7 @@ def _decision(
         "confidence": round(float(confidence), 6),
         "runner_up_margin": round(float(margin), 6),
         "policy_version": POLICY_VERSION,
+        "calibration_state": CALIBRATION_STATE,
         "reasons": reasons,
         "human_review_required": state != "CONFIRMED_AUTOMATIC",
         "prediction_is_confirmation": state.startswith("CONFIRMED_"),

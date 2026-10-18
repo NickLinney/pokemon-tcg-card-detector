@@ -2,6 +2,36 @@ template_id: card.base.v1
 version: 1
 category: Any
 coordinate_system: normalized-card-face
+lifecycle_state: experimental-candidate
+provenance:
+  basis: commissioned sample plus architecture candidate
+  reviewed: false
+anchors:
+  header_band:
+    rect: [0.02, 0.0, 0.96, 0.12]
+    locator: edge-and-text-band
+  artwork_frame:
+    rect: [0.06, 0.10, 0.88, 0.43]
+    locator: rectangular-frame
+  body_frame:
+    rect: [0.04, 0.46, 0.92, 0.34]
+    locator: text-and-symbol-region
+  matchup_band:
+    rect: [0.04, 0.78, 0.92, 0.09]
+    locator: repeated-symbol-band
+  footer_band:
+    rect: [0.02, 0.86, 0.96, 0.13]
+    locator: text-symbol-footer
+relationships:
+  - {subject: hp, relation: right-of, object: title}
+  - {subject: artwork, relation: below, object: title}
+  - {subject: attacks, relation: below, object: artwork}
+  - {subject: copyright_footer, relation: below, object: collector_number}
+compatibility_envelope:
+  coordinate_system: normalized-card-face
+  child_may_change_zone_data_type: false
+  child_may_add_zones: true
+  benchmark_state: EvidenceRequired
 zones:
   title:
     rect: [0.06, 0.025, 0.64, 0.07]

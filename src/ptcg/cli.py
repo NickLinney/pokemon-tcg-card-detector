@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .audit import verify_run
 from .service import analyze_page_request
 from .tcgdex import ingest_tcgdex, verify_database
 from .template_registry import TemplateRegistry
@@ -22,6 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify = corpus_commands.add_parser("verify")
     verify.add_argument("database", type=Path)
 
+    evidence = subparsers.add_parser("evidence")
+    evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True)
+    evidence_verify = evidence_commands.add_parser("verify")
+    evidence_verify.add_argument("run_directory", type=Path)
+
     template = subparsers.add_parser("template")
     template_commands = template.add_subparsers(dest="template_command", required=True)
     validate = template_commands.add_parser("validate")
@@ -36,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--templates", type=Path, default=_repository_root() / "templates")
     analyze.add_argument("--ocr", choices=("easyocr", "none"), default="easyocr")
     analyze.add_argument("--download-ocr-models", action="store_true")
+    analyze.add_argument("--idempotency-key")
 
     return parser
 
@@ -46,10 +53,17 @@ def main(argv: list[str] | None = None) -> int:
         result = ingest_tcgdex(args.tcgdex_path, args.database, args.manifest)
     elif args.command == "corpus" and args.corpus_command == "verify":
         result = verify_database(args.database)
+    elif args.command == "evidence" and args.evidence_command == "verify":
+        result = verify_run(args.run_directory)
+        if result["status"] != "PASS":
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 5
     elif args.command == "template" and args.template_command == "validate":
         registry = TemplateRegistry(args.root)
         findings = registry.validate()
         result = {"template_count": len(registry.ids()), "templates": registry.ids(), "findings": findings}
+        result["registry_sha256"] = registry.digest()
+        result["coverage"] = registry.coverage()
         if findings:
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
@@ -61,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             ocr_mode=args.ocr,
             download_ocr_models=args.download_ocr_models,
+            idempotency_key=args.idempotency_key,
         )
     else:  # pragma: no cover - argparse prevents this branch
         raise AssertionError("unreachable command")

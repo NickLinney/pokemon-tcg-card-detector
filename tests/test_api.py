@@ -55,6 +55,18 @@ def test_analysis_rejects_oversized_body_as_json(tmp_path: Path, monkeypatch):
     assert response.get_json()["error"] == "content_too_large"
 
 
+def test_analysis_rejects_oversized_idempotency_key(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    response = app.test_client().post(
+        "/v1/pages/analyze",
+        data={"image": (bytes_io(b"not-a-real-image"), "binder.jpeg")},
+        content_type="multipart/form-data",
+        headers={"Idempotency-Key": "x" * 257},
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_idempotency_key"
+
+
 def test_analysis_uses_shared_service_and_preserves_upload(tmp_path: Path, monkeypatch):
     app = _configured_app(tmp_path, monkeypatch)
     observed = {}
@@ -74,11 +86,13 @@ def test_analysis_uses_shared_service_and_preserves_upload(tmp_path: Path, monke
         "/v1/pages/analyze",
         data={"image": (bytes_io(b"not-a-real-image"), "binder.jpeg")},
         content_type="multipart/form-data",
+        headers={"Idempotency-Key": "fixture-request"},
     )
     assert response.status_code == 200
     assert response.get_json()["result"]["run_id"] == "fixture-run"
     assert observed["image_path"].read_bytes() == b"not-a-real-image"
     assert observed["kwargs"]["ocr_mode"] == "none"
+    assert observed["kwargs"]["idempotency_key"] == "fixture-request"
 
 
 def bytes_io(value: bytes):

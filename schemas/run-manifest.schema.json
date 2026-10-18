@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-manifest-v1",
+  "type": "object",
+  "required": ["schema_version", "manifest_id", "bindings", "configuration", "created_at", "lifecycle_state"],
+  "properties": {
+    "schema_version": {"const": "run-manifest-v1"},
+    "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "bindings": {
+      "type": "object",
+      "required": ["source_sha256", "corpus_sha256", "template_registry_sha256", "pipeline_version", "ocr_provider", "schema_versions", "configuration_sha256"],
+      "additionalProperties": true
+    },
+    "configuration": {"type": "object"},
+    "created_at": {"type": "string"},
+    "lifecycle_state": {"const": "SEALED_FOR_EXECUTION"},
+    "source_artifact": {"type": "object"},
+    "nonclaims": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

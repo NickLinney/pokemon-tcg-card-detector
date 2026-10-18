@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -10,20 +11,34 @@ import cv2
 
 from .candidates import retrieve_candidates, select_discriminator
 from .decision import decide
+from .evidence import ContentAddressedArtifactStore
+from .localization import (
+    attach_extraction,
+    initialize_zone_observations,
+    localize_zone_proposals,
+)
 from .ocr import OCRProvider, classify_script, parse_collector_number, parse_hp
+from .run_control import RunLedger, RunManifest
 from .store import ReferenceStore
 from .template_registry import TemplateRegistry, crop_zone
 from .util import ensure_write_path, sha256_file, unique_path, utc_now, write_json_new
 from .vision import (
-    detect_nine_pocket_cards,
+    classify_template_hierarchy,
+    detect_cards,
     load_image,
-    normalized_to_source_rect,
-    predict_templates,
     visual_features,
 )
 
 
-PIPELINE_VERSION = "pre-alpha-vertical-slice-v1"
+PIPELINE_VERSION = "pre-alpha-evidence-architecture-v7"
+SCHEMA_VERSIONS = {
+    "card_evidence": "card-evidence-v2",
+    "page_run": "page-run-v2",
+    "run_manifest": "run-manifest-v1",
+    "run_transition": "run-transition-v1",
+    "template_classification": "template-classification-v1",
+    "zone_observation": "zone-observation-v2",
+}
 
 
 def analyze_page(
@@ -32,136 +47,268 @@ def analyze_page(
     template_root: Path,
     output_parent: Path,
     ocr_provider: OCRProvider,
+    *,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     image_path = image_path.resolve(strict=True)
     database_path = database_path.resolve(strict=True)
+    template_root = template_root.resolve(strict=True)
     source_hash = sha256_file(image_path)
-    output_parent = ensure_write_path(output_parent)
-    output_parent.mkdir(parents=True, exist_ok=True)
-    run_directory = unique_path(output_parent / f"run-{source_hash[:12]}")
-    run_directory.mkdir(parents=False, exist_ok=False)
-    crops_directory = run_directory / "crops"
-    zones_directory = run_directory / "zones"
-    evidence_directory = run_directory / "evidence"
-    for directory in (crops_directory, zones_directory, evidence_directory):
-        directory.mkdir()
+    database_hash = sha256_file(database_path)
 
-    source_image = load_image(image_path)
-    detected_cards, page_geometry = detect_nine_pocket_cards(source_image)
     registry = TemplateRegistry(template_root)
     template_findings = registry.validate()
     if template_findings:
         raise ValueError("invalid template registry: " + "; ".join(template_findings))
-    store = ReferenceStore(database_path)
-    card_packages: list[dict[str, Any]] = []
-    inventory_rows: list[dict[str, Any]] = []
+
+    configuration = {
+        "template_root": str(template_root),
+        "ocr_provider": ocr_provider.provider_id,
+        "analysis_profile": "local-offline-pre-alpha",
+        "network_acquisition": False,
+        "automatic_confirmation": False,
+        "zone_crop_policy": "all-declared-applicable-priors",
+    }
+    manifest = RunManifest.build(
+        source_sha256=source_hash,
+        corpus_sha256=database_hash,
+        template_registry_sha256=registry.digest(),
+        pipeline_version=PIPELINE_VERSION,
+        ocr_provider=ocr_provider.provider_id,
+        schema_versions=SCHEMA_VERSIONS,
+        configuration=configuration,
+        idempotency_key=idempotency_key,
+    )
+
+    output_parent = ensure_write_path(output_parent)
+    output_parent.mkdir(parents=True, exist_ok=True)
+    base_name = f"run-{source_hash[:12]}-{manifest.digest[:8]}"
+    requested_directory = output_parent / base_name
+    if idempotency_key is not None and requested_directory.exists():
+        return _read_idempotent_result(requested_directory, manifest)
+    run_directory = (
+        requested_directory
+        if idempotency_key is not None
+        else unique_path(requested_directory)
+    )
+    run_directory.mkdir(parents=False, exist_ok=False)
+    evidence_directory = run_directory / "evidence"
+    transitions_directory = run_directory / "transitions"
+    evidence_directory.mkdir()
+    artifacts = ContentAddressedArtifactStore(run_directory / "artifacts")
+    source_artifact = artifacts.put_file(
+        image_path,
+        media_type=_image_media_type(image_path),
+        role="immutable-source-capture",
+    )
+    manifest.payload["source_artifact"] = source_artifact
+    write_json_new(run_directory / "run-manifest.json", manifest.payload)
+    ledger = RunLedger(
+        transitions_directory,
+        run_id=run_directory.name,
+        manifest_id=manifest.payload["manifest_id"],
+    )
+    ledger.transition(
+        "ADMITTED",
+        reason="Manifest bindings and template registry verified.",
+        evidence_refs=[source_artifact["artifact_id"]],
+    )
+
+    store: ReferenceStore | None = None
     try:
+        source_image = load_image(image_path)
+        ledger.transition(
+            "INGESTED",
+            reason="Source decoded within configured bounds; original bytes retained immutably.",
+            evidence_refs=[source_artifact["artifact_id"]],
+        )
+        detected_cards, page_geometry = detect_cards(source_image)
+        ledger.transition(
+            "GEOMETRY_COMPLETE",
+            reason="Supported geometry baseline produced reversible source polygons.",
+        )
+
+        card_contexts: list[dict[str, Any]] = []
+        neutral_template = registry.resolve("card.base.v1")
         for detected in detected_cards:
-            crop_path = crops_directory / f"pocket-{detected.pocket_index:02d}.png"
-            if not cv2.imwrite(str(crop_path), detected.normalized):
-                raise RuntimeError(f"failed to write normalized crop: {crop_path}")
+            normalized_ref = artifacts.put_bytes(
+                _encode_png(detected.normalized),
+                media_type="image/png",
+                role=f"normalized-card:pocket-{detected.pocket_index:02d}",
+            )
             features = visual_features(detected.normalized)
 
-            # A candidate historical title-band read precedes template selection;
-            # the raw observation remains distinct from the later hypothesis.
-            historical = registry.resolve("pokemon.ja.vs-owner.v1")
-            title_crop, title_rect = crop_zone(detected.normalized, historical["zones"]["title"])
-            title_ocr = ocr_provider.read(title_crop)
-            script = classify_script(title_ocr)
-            template_predictions = predict_templates(features, script["japanese_character_fraction"])
-            selected_template = registry.resolve(template_predictions[0]["template_id"])
-
-            observations: dict[str, Any] = {}
-            for zone_id in ("title", "hp"):
-                zone = selected_template["zones"][zone_id]
-                zone_crop, rect = crop_zone(detected.normalized, zone)
-                zone_path = zones_directory / f"pocket-{detected.pocket_index:02d}-{zone_id}.png"
-                if not cv2.imwrite(str(zone_path), zone_crop):
-                    raise RuntimeError(f"failed to write zone crop: {zone_path}")
-                ocr = title_ocr if zone_id == "title" else ocr_provider.read(
-                    zone_crop, allowlist="HP0123456789"
-                )
-                typed_value = (
-                    parse_hp(ocr) or parse_hp(title_ocr)
-                    if zone_id == "hp"
-                    else ocr.get("normalized_text")
-                )
-                observations[zone_id] = _zone_observation(
-                    zone_id,
-                    zone,
-                    rect,
-                    detected.source_polygon,
-                    zone_path,
-                    ocr,
-                    typed_value,
-                )
-
-            initial_candidates = retrieve_candidates(
-                store, observations, template_predictions[0], limit=25
+            # Family-neutral input prevents a family-specific crop from proving
+            # the same template hypothesis that selected it.
+            neutral_title_crop, _ = crop_zone(
+                detected.normalized, neutral_template["zones"]["title"]
             )
-            discriminator = select_discriminator(initial_candidates, observations)
-            if discriminator == "collector_number":
-                zone = selected_template["zones"]["collector_number"]
-                zone_crop, rect = crop_zone(detected.normalized, zone)
-                zone_path = zones_directory / (
-                    f"pocket-{detected.pocket_index:02d}-collector-number.png"
+            neutral_title_ref = artifacts.put_bytes(
+                _encode_png(neutral_title_crop),
+                media_type="image/png",
+                role=f"classification-input:title:pocket-{detected.pocket_index:02d}",
+            )
+            preliminary_title_ocr = ocr_provider.read(neutral_title_crop)
+            script = classify_script(preliminary_title_ocr)
+            classification = classify_template_hierarchy(features, script, registry)
+            classification["input_artifacts"] = [neutral_title_ref]
+            selected_template = registry.resolve(classification["selected_for_localization"])
+            observations = initialize_zone_observations(
+                selected_template, detected.source_polygon, detected.quality
+            )
+            localize_zone_proposals(
+                detected.normalized, observations, detected.source_polygon
+            )
+
+            for zone_id, observation in observations.items():
+                zone_crop, _ = crop_zone(detected.normalized, selected_template["zones"][zone_id])
+                crop_ref = artifacts.put_bytes(
+                    _encode_png(zone_crop),
+                    media_type="image/png",
+                    role=f"zone-prior:{zone_id}:pocket-{detected.pocket_index:02d}",
                 )
-                if not cv2.imwrite(str(zone_path), zone_crop):
-                    raise RuntimeError(f"failed to write zone crop: {zone_path}")
-                ocr = ocr_provider.read(zone_crop, allowlist="0123456789/／")
-                observations["collector_number"] = _zone_observation(
-                    "collector_number",
-                    zone,
-                    rect,
-                    detected.source_polygon,
-                    zone_path,
-                    ocr,
-                    parse_collector_number(ocr),
+                attach_extraction(
+                    observation,
+                    artifact_ref=crop_ref,
+                    ocr=None,
+                    typed_value=None,
+                    attempted=False,
                 )
 
-            candidates = retrieve_candidates(store, observations, template_predictions[0], limit=25)
+            _extract_declared_zones(
+                detected.normalized,
+                selected_template,
+                observations,
+                ocr_provider,
+            )
+            card_contexts.append(
+                {
+                    "detected": detected,
+                    "normalized_ref": normalized_ref,
+                    "features": features,
+                    "script": script,
+                    "classification": classification,
+                    "selected_template": selected_template,
+                    "observations": observations,
+                }
+            )
+
+        ledger.transition(
+            "TEMPLATE_HYPOTHESES_READY",
+            reason="Hierarchical uncalibrated hypotheses and UNKNOWN_FAMILY escape recorded for every card.",
+        )
+        ledger.transition(
+            "INITIAL_OBSERVATIONS_READY",
+            reason="Every declared zone has an explicit observation/presence state and immutable prior crop.",
+        )
+
+        store = ReferenceStore(database_path)
+        for context in card_contexts:
+            prediction = context["classification"]["template_hypotheses"][0]
+            observations = context["observations"]
+            initial_candidates = retrieve_candidates(store, observations, prediction, limit=25)
+            discriminator = select_discriminator(initial_candidates, observations)
+            if (
+                discriminator == "collector_number"
+                and "collector_number" in observations
+                and not observations["collector_number"]["extractor_attempts"]
+            ):
+                _extract_ocr_zone(
+                    context["detected"].normalized,
+                    context["selected_template"],
+                    observations,
+                    "collector_number",
+                    ocr_provider,
+                    allowlist="0123456789/／",
+                    parser=parse_collector_number,
+                )
+            context["initial_candidates"] = initial_candidates
+            context["discriminator"] = discriminator
+            context["candidates"] = retrieve_candidates(
+                store, observations, prediction, limit=25
+            )
+
+        ledger.transition(
+            "CANDIDATES_READY",
+            reason="Recall-oriented local candidate sets and bounded discriminator choices recorded.",
+        )
+        ledger.transition(
+            "EVIDENCE_FUSED",
+            reason="Current vertical-slice comparison signals compiled; dependency-aware fusion remains future work.",
+        )
+
+        card_packages: list[dict[str, Any]] = []
+        inventory_rows: list[dict[str, Any]] = []
+        for context in card_contexts:
+            detected = context["detected"]
+            classification = context["classification"]
+            selected_template = context["selected_template"]
+            observations = context["observations"]
+            candidates = context["candidates"]
+            decision = decide(candidates, detected.quality)
             image_evidence = {
                 "state": "reference_image_unavailable",
-                "reason": "No locally permitted TCGdex image is registered for VS1 candidates.",
+                "reason": "No locally permitted reference image is registered for these candidates.",
                 "comparison_performed": False,
             }
-            decision = decide(candidates, detected.quality)
             package = {
-                "schema_version": "card-evidence-v1",
+                "schema_version": SCHEMA_VERSIONS["card_evidence"],
                 "pipeline_version": PIPELINE_VERSION,
+                "run_manifest_id": manifest.payload["manifest_id"],
                 "capture": {
-                    "source_path": str(image_path),
+                    "source_artifact": source_artifact,
                     "source_sha256": source_hash,
                     "source_dimensions": page_geometry["source_dimensions"],
                 },
                 "card_face_observation": {
                     "pocket_index": detected.pocket_index,
                     "source_polygon": detected.source_polygon,
-                    "normalized_crop": str(crop_path.relative_to(run_directory)),
+                    "normalized_crop_artifact": context["normalized_ref"],
                     "orientation": "portrait",
                     "geometry_method": detected.geometry_method,
                     "quality": detected.quality,
-                    "visual_features": features,
-                    "script_observation": script,
-                    "template_predictions": template_predictions,
-                    "selected_template_id": selected_template["template_id"],
+                    "visual_features": context["features"],
+                    "script_observation": context["script"],
+                    "template_classification": classification,
+                    "template_predictions": classification["template_hypotheses"],
+                    "localization_template_id": selected_template["template_id"],
+                    "localization_template_is_fact": False,
                     "selected_template_lineage": selected_template.get("resolved_lineage", []),
                 },
                 "zone_observations": observations,
+                "zone_coverage": {
+                    "declared": len(selected_template.get("zones", {})),
+                    "observed_records": len(observations),
+                    "missing_records": sorted(
+                        set(selected_template.get("zones", {})) - set(observations)
+                    ),
+                    "independently_localized": sum(
+                        1 for item in observations.values() if item.get("localized") is not None
+                    ),
+                    "extraction_states": _counts(
+                        [item["extraction_state"] for item in observations.values()]
+                    ),
+                },
                 "candidate_assessments": candidates,
                 "discriminator_plan": {
-                    "selected_zone": discriminator,
+                    "selected_zone": context["discriminator"],
                     "strategy": "greatest available identifier value among unresolved candidates",
+                    "bounded_rounds": 1,
+                    "termination_reason": "single-round Pre-Alpha discriminator budget exhausted",
                 },
                 "reference_image_evidence": image_evidence,
                 "identification_decision": decision,
                 "truth_separation": {
-                    "reference_truth": "candidate_assessments originate in the pinned local corpus",
-                    "observation_truth": "zone_observations preserve raw OCR and typed parsing",
-                    "decision_truth": "identification_decision is policy output and not reference fact",
+                    "reference_truth": "candidate assessments originate in the pinned local corpus",
+                    "observation_truth": "zone records retain priors, raw extraction, and localization limits",
+                    "decision_truth": "identification decision is uncalibrated policy output, not reference fact",
                 },
                 "generated_at": utc_now(),
             }
+            payload_ref = artifacts.put_json(
+                package, role=f"card-evidence-payload:pocket-{detected.pocket_index:02d}"
+            )
+            package["evidence_payload_artifact"] = payload_ref
             evidence_path = write_json_new(
                 evidence_directory / f"pocket-{detected.pocket_index:02d}.json", package
             )
@@ -187,76 +334,237 @@ def analyze_page(
                     "collector_number": selected.get("local_id") if selected else None,
                     "identification_state": decision["state"],
                     "confidence": decision["confidence"],
-                    "review_status": "required" if decision["human_review_required"] else "not_required",
+                    "review_status": "required",
+                    "projection_state": "PROPOSAL_NOT_EFFECTIVE",
                     "capture_sha256": source_hash,
                 }
             )
-    finally:
-        store.close()
 
-    summary = {
-        "schema_version": "page-run-v1",
-        "run_id": run_directory.name,
-        "pipeline_version": PIPELINE_VERSION,
-        "source": {
-            "path": str(image_path),
-            "sha256": source_hash,
-            "immutable_input": True,
-        },
-        "page_geometry": page_geometry,
-        "pocket_order": [package["card_face_observation"]["pocket_index"] for package in card_packages],
-        "decision_counts": _counts(
-            [package["identification_decision"]["state"] for package in card_packages]
-        ),
-        "cards": [
-            {
-                "pocket_index": package["card_face_observation"]["pocket_index"],
-                "decision": package["identification_decision"],
-                "evidence_path": package["evidence_path"],
-                "top_candidates": package["candidate_assessments"][:5],
-            }
+        ledger.transition(
+            "DECIDED",
+            reason="Uncalibrated abstaining policy produced qualified decisions; automatic confirmation is disabled.",
+            evidence_refs=[
+                item["evidence_payload_artifact"]["artifact_id"] for item in card_packages
+            ],
+        )
+        review_required = any(
+            package["identification_decision"]["human_review_required"]
             for package in card_packages
-        ],
-        "nonclaims": [
-            "This single fixture does not establish general accuracy.",
-            "No TCGdex VS1 reference imagery was available for independent image confirmation.",
-            "PROBABLE and AMBIGUOUS are not confirmed identifications.",
-            "Printing variants remain unresolved without printing-specific evidence.",
-        ],
-        "generated_at": utc_now(),
-    }
-    summary_path = write_json_new(run_directory / "page-summary.json", summary)
-    _write_inventory(run_directory, inventory_rows)
-    summary["run_directory"] = str(run_directory)
-    summary["summary_path"] = str(summary_path)
-    return summary
+        )
+        if review_required:
+            ledger.transition(
+                "REVIEW_REQUIRED",
+                reason="One or more qualified decisions require an accountable human review disposition.",
+            )
+        else:
+            ledger.transition(
+                "INVENTORY_PROJECTED",
+                reason="All decisions were eligible for inventory projection under the bound policy.",
+            )
+
+        summary = {
+            "schema_version": SCHEMA_VERSIONS["page_run"],
+            "run_id": run_directory.name,
+            "run_state": ledger.state,
+            "run_manifest_id": manifest.payload["manifest_id"],
+            "pipeline_version": PIPELINE_VERSION,
+            "source": {
+                "artifact": source_artifact,
+                "sha256": source_hash,
+                "immutable_input": True,
+            },
+            "page_geometry": page_geometry,
+            "template_registry": {
+                "sha256": registry.digest(),
+                "coverage": registry.coverage(),
+            },
+            "pocket_order": [
+                package["card_face_observation"]["pocket_index"]
+                for package in card_packages
+            ],
+            "decision_counts": _counts(
+                [package["identification_decision"]["state"] for package in card_packages]
+            ),
+            "zone_observation_totals": {
+                "declared_and_recorded": sum(
+                    package["zone_coverage"]["observed_records"] for package in card_packages
+                ),
+                "independently_localized": sum(
+                    package["zone_coverage"]["independently_localized"]
+                    for package in card_packages
+                ),
+                "extraction_states": _merge_counts(
+                    [package["zone_coverage"]["extraction_states"] for package in card_packages]
+                ),
+            },
+            "cards": [
+                {
+                    "pocket_index": package["card_face_observation"]["pocket_index"],
+                    "decision": package["identification_decision"],
+                    "evidence_path": package["evidence_path"],
+                    "evidence_artifact": package["evidence_payload_artifact"],
+                    "template_classification": package["card_face_observation"][
+                        "template_classification"
+                    ],
+                    "zone_coverage": package["zone_coverage"],
+                    "top_candidates": package["candidate_assessments"][:5],
+                }
+                for package in card_packages
+            ],
+            "nonclaims": [
+                "This single fixture does not establish general accuracy.",
+                "Template scores are uncalibrated ranking signals, not probabilities or facts.",
+                "All declared zones have records and prior crops; image-supported proposals remain provisional and uncalibrated.",
+                "Reference imagery is unavailable unless separately rights-approved and registered.",
+                "PROBABLE and AMBIGUOUS are not confirmed identifications.",
+                "Printing variants remain unresolved without printing-specific evidence.",
+            ],
+            "generated_at": utc_now(),
+        }
+        summary_path = write_json_new(run_directory / "page-summary.json", summary)
+        _write_inventory(run_directory, inventory_rows)
+        summary["run_directory"] = str(run_directory)
+        summary["summary_path"] = str(summary_path)
+        return summary
+    except Exception as exc:
+        ledger.fail(f"{type(exc).__name__}: {exc}")
+        raise
+    finally:
+        if store is not None:
+            store.close()
 
 
-def _zone_observation(
+def _extract_ocr_zone(
+    image,
+    template: dict[str, Any],
+    observations: dict[str, dict[str, Any]],
     zone_id: str,
-    zone: dict[str, Any],
-    normalized_rect: list[int],
-    source_polygon: list[list[int]],
-    artifact_path: Path,
-    ocr: dict[str, Any],
-    typed_value: Any,
-) -> dict[str, Any]:
+    provider: OCRProvider,
+    *,
+    allowlist: str | None = None,
+    parser=None,
+) -> None:
+    if zone_id not in observations:
+        return
+    crop, _ = crop_zone(image, template["zones"][zone_id])
+    ocr = provider.read(crop, allowlist=allowlist)
+    typed_value = parser(ocr) if parser else ocr.get("normalized_text")
+    observation = observations[zone_id]
+    attach_extraction(
+        observation,
+        artifact_ref=observation["prior_crop_artifact"],
+        ocr=ocr,
+        typed_value=typed_value,
+        attempted=True,
+    )
+
+
+def _extract_declared_zones(
+    image,
+    template: dict[str, Any],
+    observations: dict[str, dict[str, Any]],
+    provider: OCRProvider,
+) -> None:
+    for zone_id, zone in template.get("zones", {}).items():
+        extractor_provider = zone.get("extractor", {}).get("provider")
+        data_type = zone.get("data_type")
+        if extractor_provider in {"ocr", "ocr-symbol", "symbol-ocr"}:
+            allowlist = None
+            parser = None
+            if zone_id == "hp":
+                allowlist = "HP0123456789"
+                parser = parse_hp
+            elif zone_id == "collector_number":
+                allowlist = "0123456789/／"
+                parser = parse_collector_number
+            elif data_type == "integer":
+                allowlist = "0123456789x×+-"
+                parser = _parse_first_integer
+            _extract_ocr_zone(
+                image,
+                template,
+                observations,
+                zone_id,
+                provider,
+                allowlist=allowlist,
+                parser=parser,
+            )
+        elif extractor_provider == "image-feature":
+            crop, _ = crop_zone(image, zone)
+            observation = observations[zone_id]
+            attach_extraction(
+                observation,
+                artifact_ref=observation["prior_crop_artifact"],
+                ocr=None,
+                typed_value={
+                    "descriptor_state": "LOCAL_UNCOMPARED",
+                    "visual_features": visual_features(crop),
+                },
+                attempted=True,
+                provider_id="opencv:visual-features-v1",
+            )
+
+
+def _parse_first_integer(ocr: dict[str, Any]) -> int | None:
+    match = re.search(r"\d{1,4}", ocr.get("raw_text", ""))
+    return int(match.group(0)) if match else None
+
+
+def _encode_png(image) -> bytes:
+    ok, encoded = cv2.imencode(".png", image)
+    if not ok:
+        raise RuntimeError("failed to encode PNG artifact")
+    return encoded.tobytes()
+
+
+def _read_idempotent_result(run_directory: Path, manifest: RunManifest) -> dict[str, Any]:
+    from .audit import verify_run
+
+    manifest_path = run_directory / "run-manifest.json"
+    summary_path = run_directory / "page-summary.json"
+    if not manifest_path.is_file() or not summary_path.is_file():
+        raise ValueError(
+            f"idempotency collision with incomplete run; inspect or resume: {run_directory}"
+        )
+    existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if existing_manifest.get("manifest_id") != manifest.payload["manifest_id"]:
+        raise ValueError("idempotency key collision across different run manifests")
+    audit = verify_run(run_directory)
+    if audit["status"] != "PASS":
+        raise ValueError(
+            f"idempotent run failed integrity verification: {audit['findings']}"
+        )
+    result = json.loads(summary_path.read_text(encoding="utf-8"))
+    result["run_directory"] = str(run_directory)
+    result["summary_path"] = str(summary_path)
+    result["idempotent_replay"] = True
+    result["idempotent_replay_integrity"] = "PASS"
+    return result
+
+
+def _image_media_type(path: Path) -> str:
     return {
-        "semantic_zone": zone_id,
-        "normalized_template_rect": zone["rect"],
-        "normalized_pixel_rect": normalized_rect,
-        "source_polygon": normalized_to_source_rect(normalized_rect, source_polygon),
-        "artifact_path": str(artifact_path),
-        "extractor_configuration": zone.get("extractor"),
-        "ocr": ocr,
-        "typed_value": typed_value,
-    }
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".tif": "image/tiff",
+        ".tiff": "image/tiff",
+        ".webp": "image/webp",
+    }.get(path.suffix.lower(), "application/octet-stream")
 
 
 def _counts(values: list[str]) -> dict[str, int]:
     result: dict[str, int] = {}
     for value in values:
         result[value] = result.get(value, 0) + 1
+    return dict(sorted(result.items()))
+
+
+def _merge_counts(counts: list[dict[str, int]]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for count in counts:
+        for key, value in count.items():
+            result[key] = result.get(key, 0) + value
     return dict(sorted(result.items()))
 
 

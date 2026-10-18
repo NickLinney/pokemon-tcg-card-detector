@@ -1,1 +1,26 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"zone-observation-v1","type":"object","required":["semantic_zone","source_polygon","ocr","typed_value"],"properties":{"semantic_zone":{"type":"string"},"source_polygon":{"type":"array","minItems":4,"maxItems":4},"ocr":{"type":"object","required":["provider","raw_text","normalized_text","confidence"]},"typed_value":{}},"additionalProperties":true}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zone-observation-v2",
+  "type": "object",
+  "required": ["schema_version", "semantic_zone", "semantic_family", "template_id", "applicable", "presence_state", "prior", "localized", "localization", "quality", "cardinality", "data_type", "extraction_state", "extractor_attempts", "typed_value"],
+  "properties": {
+    "schema_version": {"const": "zone-observation-v2"},
+    "semantic_zone": {"type": "string"},
+    "semantic_family": {"type": "string"},
+    "template_id": {"type": "string"},
+    "applicable": {"type": "boolean"},
+    "presence_state": {"enum": ["PRESENT", "ABSENT", "NOT_APPLICABLE", "NOT_LOCALIZED", "OCCLUDED", "UNREADABLE"]},
+    "prior": {"type": "object"},
+    "localized": {"type": ["object", "null"]},
+    "localization": {"type": "object"},
+    "quality": {"type": "object"},
+    "cardinality": {"enum": ["one", "zero-or-one", "many"]},
+    "data_type": {"type": ["string", "null"]},
+    "extraction_state": {"enum": ["NOT_APPLICABLE", "NOT_ATTEMPTED", "UNSUPPORTED", "NO_SIGNAL", "SUCCEEDED", "FAILED"]},
+    "extractor_attempts": {"type": "array"},
+    "typed_value": {},
+    "ocr": {"type": "object"},
+    "prior_crop_artifact": {"type": "object"}
+  },
+  "additionalProperties": true
+}

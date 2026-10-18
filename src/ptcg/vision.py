@@ -3,10 +3,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    from .template_registry import TemplateRegistry
 
 
 CARD_WIDTH = 630
@@ -20,6 +23,43 @@ class DetectedCard:
     normalized: np.ndarray
     quality: dict[str, float]
     geometry_method: str
+
+
+def detect_cards(image: np.ndarray) -> tuple[list[DetectedCard], dict[str, Any]]:
+    """Detect a supported page layout, falling back to a bounded single card.
+
+    The nine-pocket detector remains the only multi-card implementation. The
+    fallback is explicit and does not claim arbitrary-page support.
+    """
+    try:
+        return detect_nine_pocket_cards(image)
+    except ValueError as nine_pocket_error:
+        height, width = image.shape[:2]
+        aspect_ratio = width / height
+        if not 0.58 <= aspect_ratio <= 0.86:
+            raise ValueError(
+                "unsupported capture geometry: neither nine-pocket evidence nor "
+                "a portrait single-card aspect ratio was detected"
+            ) from nine_pocket_error
+        polygon = [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]
+        normalized = cv2.resize(image, (CARD_WIDTH, CARD_HEIGHT), interpolation=cv2.INTER_AREA)
+        card = DetectedCard(
+            pocket_index=1,
+            source_polygon=polygon,
+            normalized=normalized,
+            quality=quality_metrics(normalized),
+            geometry_method="single-card-full-frame-v1",
+        )
+        return [card], {
+            "method": "single-card-full-frame-v1",
+            "page_card_envelope": polygon,
+            "grid_shape": [1, 1],
+            "detected_observation_count": 1,
+            "source_dimensions": {"width": width, "height": height},
+            "qualification": (
+                "Full-frame portrait fallback; card corners were not independently detected."
+            ),
+        }
 
 
 def load_image(path: Path) -> np.ndarray:
@@ -165,25 +205,203 @@ def visual_features(image: np.ndarray) -> dict[str, float]:
     }
 
 
-def predict_templates(features: dict[str, float], japanese_fraction: float) -> list[dict[str, Any]]:
-    yellow = features["yellow_border_fraction"]
-    historical_score = min(0.92, 0.38 + yellow * 0.65 + japanese_fraction * 0.25)
-    modern_score = max(0.05, 0.48 - yellow * 0.35)
-    predictions = [
-        {
-            "template_id": "pokemon.ja.vs-owner.v1",
-            "score": round(historical_score, 4),
-            "reasons": ["yellow historical border", "owner-associated VS geometry", "Japanese script evidence"],
-            "series_hint": "VS",
-        },
-        {
-            "template_id": "pokemon.modern-standard.v1",
-            "score": round(modern_score, 4),
-            "reasons": ["contrasting modern family retained as alternative"],
-            "series_hint": None,
-        },
+def classify_template_hierarchy(
+    features: dict[str, float],
+    script_observation: dict[str, Any],
+    registry: "TemplateRegistry",
+    *,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    """Produce provisional coarse-to-fine hypotheses without forced fitting.
+
+    This is a deterministic rules baseline, not a calibrated classifier. Scores
+    are ranking signals and are explicitly prohibited from being represented as
+    probabilities until benchmark calibration exists.
+    """
+    yellow = float(features.get("yellow_border_fraction", 0.0))
+    japanese_fraction = float(script_observation.get("japanese_character_fraction", 0.0))
+    japanese_supported = japanese_fraction >= 0.2
+
+    template_hypotheses: list[dict[str, Any]] = []
+    for template_id in registry.candidate_ids():
+        template = registry.resolve(template_id)
+        score = 0.08
+        reasons: list[str] = []
+        support_depth = "category"
+
+        category = template.get("category", "Unknown")
+        if category == "Pokemon":
+            score += 0.12
+            reasons.append("Pokémon category retained as a weak baseline hypothesis")
+        elif category in {"Trainer", "Energy"}:
+            score += 0.06
+            reasons.append(f"{category} category retained because no category detector is available")
+
+        if template.get("language") == "ja":
+            if japanese_supported:
+                score += 0.30
+                reasons.append("family-neutral title crop contains Japanese-script evidence")
+                support_depth = "script_language"
+            else:
+                reasons.append("Japanese-language requirement is not yet supported by OCR evidence")
+
+        era = template.get("era")
+        border = template.get("predicates", {}).get("border")
+        if border == "yellow" or era == "historical" or isinstance(era, int):
+            score += min(0.28, yellow * 0.32)
+            reasons.append("yellow-border geometry supports a historical layout family")
+            support_depth = "era_layout"
+        elif era == "modern":
+            score += max(0.0, (1.0 - yellow) * 0.22)
+            reasons.append("reduced yellow-border evidence supports the modern alternative")
+            support_depth = "era_layout"
+
+        if template.get("series_hint"):
+            score -= 0.06
+            reasons.append(
+                "set/mechanic-specific family is penalized until an independent marker is observed"
+            )
+        template_hypotheses.append(
+            {
+                "template_id": template_id,
+                "score": round(max(0.0, min(score, 0.95)), 6),
+                "score_semantics": "uncalibrated-ranking-signal",
+                "support_depth": support_depth,
+                "hierarchy": {
+                    "category": category,
+                    "script": script_observation.get("script", "Unknown"),
+                    "language": template.get("language", "Unknown"),
+                    "region": template.get("region", "Unknown"),
+                    "era_layout": era or "Unknown",
+                    "mechanic_form": template.get("mechanic", "Unknown"),
+                    "printing_overlay": "Unknown",
+                },
+                "reasons": reasons,
+                "series_hint": template.get("series_hint"),
+            }
+        )
+
+    template_hypotheses.sort(key=lambda item: (-item["score"], item["template_id"]))
+    template_hypotheses = template_hypotheses[:top_k]
+    top_score = template_hypotheses[0]["score"] if template_hypotheses else 0.0
+    runner_up = template_hypotheses[1]["score"] if len(template_hypotheses) > 1 else 0.0
+    margin = top_score - runner_up
+    forced_fit_risk = top_score < 0.55 or margin < 0.08
+    unknown_score = round(max(0.05, 1.0 - top_score + max(0.0, 0.08 - margin)), 6)
+
+    hierarchy_levels = [
+        _level("product_scope", [("PHYSICAL_POKEMON_TCG", 0.8, "card-like geometry detected"), ("UNKNOWN", 0.2, "scope classifier not independently benchmarked")]),
+        _level("face_state", [("FRONT", 0.7, "front-like border/layout signal"), ("UNKNOWN", 0.3, "back/empty/occluded detector not implemented")]),
+        _level("orientation", [("PORTRAIT", 0.98, "normalized crop aspect ratio"), ("UNKNOWN", 0.02, "rotation classifier not implemented")]),
+        _level("category", [("POKEMON", 0.45, "weak registry prior"), ("UNKNOWN", 0.4, "category detector not implemented"), ("TRAINER_OR_ENERGY", 0.15, "retained alternative")]),
+        _level(
+            "script",
+            [
+                ("JAPANESE", round(japanese_fraction, 6), "OCR Unicode-range evidence"),
+                ("UNKNOWN", round(1.0 - japanese_fraction, 6), "insufficient or non-Japanese OCR signal"),
+            ],
+        ),
+        _level(
+            "language",
+            [
+                ("JAPANESE", round(japanese_fraction, 6), "script-derived language evidence"),
+                ("UNKNOWN", round(1.0 - japanese_fraction, 6), "language is not inferred without script support"),
+            ],
+        ),
+        _level("region", [("UNKNOWN", 1.0, "region-specific evidence is not implemented")]),
+        _level(
+            "era_layout",
+            [
+                ("HISTORICAL", round(min(0.9, 0.2 + yellow * 0.7), 6), "yellow-border layout evidence"),
+                ("MODERN", round(max(0.05, 0.65 - yellow * 0.55), 6), "contrasting layout alternative"),
+                ("UNKNOWN", 0.35, "era classifier is not calibrated"),
+            ],
+        ),
+        _level(
+            "template_family",
+            [
+                (
+                    item["template_id"],
+                    item["score"],
+                    "; ".join(item["reasons"]) or "registry candidate",
+                )
+                for item in template_hypotheses
+            ]
+            + [("UNKNOWN_FAMILY", unknown_score, "explicit forced-fit escape")],
+        ),
+        _level("mechanic_form", [("UNKNOWN", 1.0, "independent mechanic detector not implemented")]),
+        _level("set_card_exception", [("UNKNOWN", 1.0, "exception evidence is not implemented")]),
+        _level("printing_overlay", [("UNKNOWN", 1.0, "printing evidence not available")]),
     ]
-    return sorted(predictions, key=lambda item: item["score"], reverse=True)
+    return {
+        "schema_version": "template-classification-v1",
+        "classifier_version": "deterministic-hierarchy-baseline-v1",
+        "calibration_state": "EVIDENCE_REQUIRED",
+        "hierarchy_levels": hierarchy_levels,
+        "template_hypotheses": template_hypotheses,
+        "unknown_family": {
+            "template_id": "UNKNOWN_FAMILY",
+            "score": unknown_score,
+            "state": "OUT_OF_DISTRIBUTION_POSSIBLE" if forced_fit_risk else "KNOWN_FAMILY_PLAUSIBLE",
+            "reasons": [
+                "No calibrated learned classifier or representative taxonomy benchmark is available.",
+                "Fine-grained mechanic and printing levels intentionally remain unknown.",
+            ],
+        },
+        "ensemble_disagreement": {
+            "state": "UNMEASURED",
+            "reason": "Only one deterministic baseline method is implemented.",
+        },
+        "selected_for_localization": (
+            template_hypotheses[0]["template_id"] if template_hypotheses else "card.base.v1"
+        ),
+        "selected_is_fact": False,
+        "nonclaims": [
+            "Scores are not calibrated probabilities.",
+            "A localization template is a working prior, not a classified template fact.",
+        ],
+    }
+
+
+def predict_templates(features: dict[str, float], japanese_fraction: float) -> list[dict[str, Any]]:
+    """Backward-compatible two-family baseline retained for external callers.
+
+    New application code uses :func:`classify_template_hierarchy` with a
+    registry. This compatibility function does not claim hierarchy coverage.
+    """
+    yellow = features["yellow_border_fraction"]
+    historical_score = min(0.86, 0.30 + yellow * 0.55 + japanese_fraction * 0.25)
+    modern_score = max(0.05, 0.42 - yellow * 0.30)
+    return sorted(
+        [
+            {
+                "template_id": "pokemon.ja.historical.v1",
+                "score": round(historical_score, 4),
+                "score_semantics": "uncalibrated-ranking-signal",
+                "reasons": ["historical border and script baseline"],
+                "series_hint": None,
+            },
+            {
+                "template_id": "pokemon.modern-standard.v1",
+                "score": round(modern_score, 4),
+                "score_semantics": "uncalibrated-ranking-signal",
+                "reasons": ["modern family retained as alternative"],
+                "series_hint": None,
+            },
+        ],
+        key=lambda item: item["score"],
+        reverse=True,
+    )
+
+
+def _level(name: str, hypotheses: list[tuple[str, float, str]]) -> dict[str, Any]:
+    return {
+        "level": name,
+        "hypotheses": [
+            {"value": value, "score": score, "reason": reason}
+            for value, score, reason in hypotheses
+        ],
+    }
 
 
 def normalized_to_source_rect(

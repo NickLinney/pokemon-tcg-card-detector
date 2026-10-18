@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "template-classification-v1",
+  "type": "object",
+  "required": ["schema_version", "classifier_version", "calibration_state", "hierarchy_levels", "template_hypotheses", "unknown_family", "selected_for_localization", "selected_is_fact"],
+  "properties": {
+    "schema_version": {"const": "template-classification-v1"},
+    "classifier_version": {"type": "string"},
+    "calibration_state": {"enum": ["EVIDENCE_REQUIRED", "CALIBRATED"]},
+    "hierarchy_levels": {"type": "array", "minItems": 1},
+    "template_hypotheses": {"type": "array", "minItems": 1},
+    "unknown_family": {"type": "object"},
+    "selected_for_localization": {"type": "string"},
+    "selected_is_fact": {"const": false}
+  },
+  "additionalProperties": true
+}

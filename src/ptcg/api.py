@@ -70,6 +70,13 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         if suffix not in ALLOWED_IMAGE_SUFFIXES:
             return jsonify(error="unsupported_image_type", allowed=sorted(ALLOWED_IMAGE_SUFFIXES)), 415
 
+        idempotency_key = request.headers.get("Idempotency-Key")
+        if idempotency_key is not None and not 1 <= len(idempotency_key) <= 256:
+            return jsonify(
+                error="invalid_idempotency_key",
+                message="Idempotency-Key must contain between 1 and 256 characters",
+            ), 400
+
         request_id = uuid4().hex
         upload_root = ensure_write_path(Path(app.config["UPLOAD_ROOT"]))
         request_directory = ensure_write_path(upload_root / request_id)
@@ -86,6 +93,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 ocr_mode=app.config["OCR_MODE"],
                 download_ocr_models=bool(app.config["DOWNLOAD_OCR_MODELS"]),
                 model_directory=Path(app.config["MODEL_DIRECTORY"]),
+                idempotency_key=idempotency_key,
             )
         except (FileNotFoundError, ValueError) as exc:
             return jsonify(error="invalid_analysis_request", message=str(exc), request_id=request_id), 400

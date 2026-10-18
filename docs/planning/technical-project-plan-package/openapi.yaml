@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pokemon TCG Card Detector Local API
-  version: 0.1.0-pre-alpha.1
+  version: 0.1.0-pre-alpha.2
   description: >-
     Synchronous local integration adapter for the existing vertical slice.
     This contract is not the target durable production job API.
@@ -38,6 +38,18 @@ paths:
     post:
       operationId: analyzePage
       description: Synchronously analyze one uploaded binder-page or card image.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          description: >-
+            Opaque caller key. The service stores only a hash in the run
+            manifest and returns an existing completed run for the same sealed
+            bindings.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
       requestBody:
         required: true
         content:

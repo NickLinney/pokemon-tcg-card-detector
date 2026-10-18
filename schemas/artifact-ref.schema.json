@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artifact-ref-v1",
+  "type": "object",
+  "required": ["artifact_id", "sha256", "bytes", "media_type", "role", "path", "immutable"],
+  "properties": {
+    "artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bytes": {"type": "integer", "minimum": 0},
+    "media_type": {"type": "string"},
+    "role": {"type": "string"},
+    "path": {"type": "string"},
+    "immutable": {"const": true}
+  },
+  "additionalProperties": false
+}

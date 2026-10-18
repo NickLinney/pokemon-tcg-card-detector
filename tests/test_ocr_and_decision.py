@@ -33,3 +33,21 @@ def test_conflict_prevents_confirmation():
         "contradictions": ["collector number differs"],
     }
     assert decide([candidate], {"glare_fraction": 0.0, "laplacian_variance": 100})["state"] == "CONFLICTING_EVIDENCE"
+
+
+def test_uncalibrated_policy_never_confirms_automatically():
+    candidate = {
+        "reference_card_id": "a",
+        "fused_score": 0.99,
+        "evidence": [
+            {"family": "identifier", "strength": 1.0},
+            {"family": "image", "strength": 1.0},
+        ],
+        "contradictions": [],
+    }
+    result = decide(
+        [candidate], {"glare_fraction": 0.0, "laplacian_variance": 100}
+    )
+    assert result["state"] == "PROBABLE"
+    assert result["calibration_state"] == "EVIDENCE_REQUIRED"
+    assert result["prediction_is_confirmation"] is False
