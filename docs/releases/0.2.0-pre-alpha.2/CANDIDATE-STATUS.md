@@ -13,6 +13,22 @@ identity portion of UAT-14 without a rights-qualified, adjudicated truth record
 for the supplied sample. It must not substitute a guessed identity merely to
 make the workflow green.
 
+## Current exact-candidate evidence
+
+The `dev`, `test`, and `staging` ledgers were promoted from one exact source
+history and exercised against the supplied binder sample. The qualified UAT
+result records 14 sealed artifacts, matching effective-inventory digests, the
+durable job-state sequence, and an attributable `LEAVE_UNRESOLVED` review. The
+repository suite passed 78 tests. The containerized CLI reports
+`0.2.0-pre-alpha.2`; the packaged registry validates seven templates and 19
+semantic zones; and the HTTP `/healthz` and `/readyz` probes pass on the exact
+locally built image.
+
+Local supply-chain evidence binds the source commit and image digest, emits a
+CycloneDX SBOM and provenance, and records a passing secret scan. Vulnerability
+scanning remains `EVIDENCE_REQUIRED`; none of this evidence is an independent
+security disposition or release authorization.
+
 ## Release-blocking gates
 
 - RG-0 through RG-6 lack the full actual role dispositions required by the
@@ -21,9 +37,6 @@ make the workflow green.
   absent.
 - Exact-image vulnerability/container scanning and independent security,
   QA/evaluation, licensing and release decisions are absent.
-- Docker image evidence is not current because the host Docker store has a
-  previously observed capacity blocker; no broad destructive prune is
-  authorized.
 - Remote credentials/publication evidence remains unavailable.
 
 Accordingly, no release tag, GitHub prerelease, lifecycle promotion, production
