@@ -26,6 +26,21 @@ def test_health_does_not_require_runtime_dependencies(tmp_path: Path, monkeypatc
     response = app.test_client().get("/healthz")
     assert response.status_code == 200
     assert response.get_json()["status"] == "ok"
+    assert response.get_json()["canonical_version"] == "0.2.0-pre-alpha.2"
+    assert response.get_json()["released"] is False
+
+
+def test_metadata_preserves_lifecycle_and_distribution_mapping(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    response = app.test_client().get("/v1/meta")
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "canonical_version": "0.2.0-pre-alpha.2",
+        "lifecycle": "PRE_ALPHA",
+        "pipeline_version": "pre-alpha-evidence-architecture-v7",
+        "python_distribution_version": "0.2.0.dev2",
+        "released": False,
+    }
 
 
 def test_readiness_reports_missing_database(tmp_path: Path, monkeypatch):

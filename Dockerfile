@@ -1,5 +1,10 @@
 FROM python:3.12-slim AS runtime
 
+ARG PTCG_VERSION=0.2.0-pre-alpha.2
+LABEL org.opencontainers.image.title="Pokemon TCG Card Detector" \
+      org.opencontainers.image.version="${PTCG_VERSION}" \
+      org.opencontainers.image.description="Unreleased local-first Pre-Alpha evidence workflow"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PTCG_PROJECT_ROOT=/workspace

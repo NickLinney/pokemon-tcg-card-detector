@@ -67,6 +67,21 @@ authorized credential; reference-image confirmation and accuracy measurement
 lack required evidence; release acceptance is not authorized. Continue from the
 feature branch without tagging until those distinct gates are satisfied.
 
+## 2026-10-18 — Pre-Alpha 2 release-plan extension intake
+
+- Action class: `CIO_DECIDE` / `AUTHORIZED_EXECUTION`.
+- Verified the `0.2.0-pre-alpha.2` extension ZIP and every member in its SHA-256
+  manifest; bound it to baseline commit `6f4003150d7703f87ee07dd23a810afd062b033f`.
+- SSAC intake disposition: `ADMIT_QUALIFIED`; implementation may proceed while
+  independent release, security, QA, licensing and publication gates remain
+  unsatisfied.
+- Reconciled the inherited generic direct-to-`main` Pre-Alpha guidance with the
+  project-specific `feature/* -> dev -> test -> staging -> release/*` strategy.
+- Recorded `0.2.0-pre-alpha.2` as a development target with PEP 440 mapping
+  `0.2.0.dev2`; the product remains Pre-Alpha and unreleased.
+- Established non-squash, feature-scoped history. Branch existence and local
+  test results are evidence, not promotion or approval.
+
 ## 2026-10-17 — Architecture correction after evidence challenge
 
 - Trigger: Commissioner challenged whether template-type classification and

@@ -8,10 +8,12 @@ from .audit import verify_run
 from .service import analyze_page_request
 from .tcgdex import ingest_tcgdex, verify_database
 from .template_registry import TemplateRegistry
+from .version import CANONICAL_VERSION
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ptcg")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {CANONICAL_VERSION}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     corpus = subparsers.add_parser("corpus")

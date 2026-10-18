@@ -8,7 +8,7 @@
     "manifest_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "bindings": {
       "type": "object",
-      "required": ["source_sha256", "corpus_sha256", "template_registry_sha256", "pipeline_version", "ocr_provider", "schema_versions", "configuration_sha256"],
+      "required": ["product_version", "python_distribution_version", "lifecycle", "source_sha256", "corpus_sha256", "template_registry_sha256", "pipeline_version", "ocr_provider", "schema_versions", "configuration_sha256"],
       "additionalProperties": true
     },
     "configuration": {"type": "object"},
