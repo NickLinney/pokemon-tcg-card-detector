@@ -1,0 +1,19 @@
+flowchart LR
+    U[UAT qualified acceptance] --> V[Version and contract normalization]
+    V --> J[Durable asynchronous analysis jobs]
+    J --> A[Run and artifact enumeration]
+    A --> D[Authorized CSV and evidence download]
+    J --> C[Collection binder page context]
+    C --> R[Review queue and evidence read model]
+    D --> R
+    R --> S[Append-only review and supersession]
+    S --> I[Effective inventory projection]
+    I --> B[Adjudicated fixtures and measured baseline]
+    B --> Q[Pre-Alpha 2 UAT and independent dispositions]
+    Q --> G{Release gate}
+    G -->|Pass| X[0.2.0-pre-alpha.2 release]
+    G -->|Fail| P[Remain unreleased and remediate]
+
+    T[Template and zone evidence] -. measured by .-> B
+    E[Extractor and candidate evidence] -. measured by .-> B
+    O[Operations and recovery evidence] -. qualifies .-> Q

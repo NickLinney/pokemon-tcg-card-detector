@@ -1,0 +1,101 @@
+{
+  "schema_version": "release-plan-v1",
+  "plan_identity": {
+    "name": "Pokemon TCG Card Detector Software Release Lifecycle Development Plan",
+    "version": "0.2.0-pre-alpha.2",
+    "status": "PLANNED_NOT_IMPLEMENTED_NOT_RELEASED",
+    "prepared_at": "2026-10-18",
+    "baseline_commit": "6f4003150d7703f87ee07dd23a810afd062b033f"
+  },
+  "target_release": {
+    "canonical_semver": "0.2.0-pre-alpha.2",
+    "python_distribution_version": "0.2.0.dev2",
+    "lifecycle": "PRE_ALPHA",
+    "numeric_increment": "MINOR",
+    "lifecycle_promotion": false,
+    "git_tag": "0.2.0-pre-alpha.2",
+    "release_branch": "release/0.2.0",
+    "publication_authorized": false
+  },
+  "authority": {
+    "planning_authorized_by": "Commissioner/CVO",
+    "implementation_authorized_by_this_artifact": false,
+    "release_authority_present": false,
+    "independent_dispositions_present": false
+  },
+  "baseline_evidence": {
+    "uat_package": "Pokemon-TCG-Container-UAT-Package-0.1.0-pre-alpha.1.zip",
+    "uat_package_sha256": "95f9cfb4ac81540d677e17be2b5085440bbc3ab341aa431809747d48b860298f",
+    "uat_disposition": "QUALIFIED_ACCEPTANCE",
+    "repository_tests_passed": 35,
+    "inventory_rows": 9,
+    "ambiguous_rows": 9,
+    "zone_records": 171,
+    "independently_localized_zones": 139,
+    "verified_artifacts": 198,
+    "uat_14": "FAIL",
+    "uat_15": "NOT_IMPLEMENTED"
+  },
+  "version_interpretation": {
+    "core_version_meaning": "second pre-1.0 minor capability increment",
+    "prerelease_meaning": "retained Pre-Alpha maturity and sequence 2",
+    "generic_guidance_conflict": "Inherited 0.0.0-pre-alpha.N-only text requires explicit repository reconciliation",
+    "controlling_project_clarification": "Commissioner confirmed 0.2.0-pre-alpha.2 is acceptable",
+    "required_governance_action": "Record repository-level adaptation and align version surfaces before release preparation"
+  },
+  "epics": [
+    {"id": "EP-00", "name": "Release identity and governed contracts", "stories": ["US-001", "US-002"]},
+    {"id": "EP-01", "name": "Durable analysis jobs and collection context", "stories": ["US-010", "US-011", "US-012"]},
+    {"id": "EP-02", "name": "Run and artifact delivery", "stories": ["US-020", "US-021"]},
+    {"id": "EP-03", "name": "Review, supersession and effective inventory", "stories": ["US-030", "US-031", "US-032", "US-033"]},
+    {"id": "EP-04", "name": "Measured semantic evidence uplift", "stories": ["US-040", "US-041", "US-042", "US-043", "US-044"]},
+    {"id": "EP-05", "name": "Hardening and evidence-bearing release", "stories": ["US-050", "US-051", "US-052", "US-053"]}
+  ],
+  "critical_path": [
+    "US-001",
+    "US-002",
+    "US-010",
+    "US-011",
+    "US-020",
+    "US-021",
+    "US-030",
+    "US-031",
+    "US-032",
+    "US-053"
+  ],
+  "parallel_join_before_release": [
+    "US-012",
+    "US-033",
+    "US-040",
+    "US-041",
+    "US-042",
+    "US-043",
+    "US-044",
+    "US-050",
+    "US-051",
+    "US-052"
+  ],
+  "gates": [
+    {"id": "RG-0", "name": "Scope and version", "required": true},
+    {"id": "RG-1", "name": "Contracts and data", "required": true},
+    {"id": "RG-2", "name": "Ground truth and rights", "required": true},
+    {"id": "RG-3", "name": "Feature complete", "required": true},
+    {"id": "RG-4", "name": "Candidate qualified", "required": true},
+    {"id": "RG-5", "name": "Pre-Alpha truthfulness", "required": true},
+    {"id": "RG-6", "name": "Release authority", "required": true}
+  ],
+  "automatic_confirmation": {
+    "enabled": false,
+    "release_blocker_if_enabled_without_policy": true
+  },
+  "ssac": {
+    "plan_selection": "ADMIT_QUALIFIED",
+    "version_correction": "DEFER_AFFECTED_BINDINGS_THEN_REPLAN",
+    "release_transition": "ESCALATE_TO_ACTUAL_RELEASE_AUTHORITY"
+  },
+  "completion_contract": {
+    "plan_status": "COMPLETE_WITH_QUALIFIED_RESULTS",
+    "implementation_complete": false,
+    "release_complete": false
+  }
+}

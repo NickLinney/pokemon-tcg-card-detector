@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> PlanCandidate
+    PlanCandidate --> PreAlphaDevelopment: CIO admits qualified plan
+    PreAlphaDevelopment --> FeatureComplete: scoped stories and contracts pass
+    FeatureComplete --> PreAlphaReleaseCandidate: exact image and evidence packet sealed
+    PreAlphaReleaseCandidate --> PreAlphaDevelopment: failed QA security evaluation or UAT
+    PreAlphaReleaseCandidate --> AwaitingAuthority: technical gates pass
+    AwaitingAuthority --> PreAlphaReleased: release authority approves exact candidate
+    AwaitingAuthority --> PreAlphaDeferred: release deferred or rejected
+    PreAlphaReleased --> [*]
+    PreAlphaDeferred --> [*]

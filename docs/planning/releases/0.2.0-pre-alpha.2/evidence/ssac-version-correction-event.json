@@ -1,0 +1,22 @@
+{
+  "event_type": "EVIDENCE_CHANGE",
+  "subject": {
+    "type": "Strategy",
+    "identity": "pokemon-tcg-card-detector:release-version-strategy"
+  },
+  "signals": {
+    "strategy_premise_invalidated": true,
+    "feedback_changes_model": true,
+    "dependent_binding_stale": true
+  },
+  "evidence_refs": [
+    "commissioner:2026-10-18:0.2.0-pre-alpha.2-is-acceptable",
+    "standard:development-lifecycle-maturity:sections-2-14-16",
+    "project:planning-package:0.1.0-pre-alpha.1",
+    "project:openapi:0.1.0-pre-alpha.2"
+  ],
+  "scope": "Version target, lifecycle gate, release identity surfaces, diagrams and downstream planning bindings",
+  "authority": "The Commissioner explicitly corrected the project-specific version interpretation; release and publication authority remain separately gated",
+  "baseline": "The initial draft incorrectly targeted 0.1.0-alpha by treating inherited 0.0.0-pre-alpha.N guidance as universally controlling",
+  "commentary": "Bounded replan: retain the minor capability increment and Pre-Alpha maturity as 0.2.0-pre-alpha.2, preserve the invalidated rationale as evidence, and revalidate only affected plan bindings."
+}
