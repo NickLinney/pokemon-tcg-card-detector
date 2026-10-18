@@ -8,6 +8,7 @@ from .audit import verify_run
 from .service import analyze_page_request
 from .reviews import ReviewStore
 from .evaluation import GroundTruthRegistry
+from .operations import backup_state, verify_backup
 from .tcgdex import ingest_tcgdex, verify_database
 from .template_registry import TemplateRegistry
 from .version import CANONICAL_VERSION
@@ -98,6 +99,15 @@ def build_parser() -> argparse.ArgumentParser:
     fixture_validate = evaluate_commands.add_parser("fixtures")
     fixture_validate.add_argument("registry", type=Path)
 
+    operations = subparsers.add_parser("operations")
+    operations_commands = operations.add_subparsers(dest="operations_command", required=True)
+    backup = operations_commands.add_parser("backup")
+    backup.add_argument("--job-database", type=Path, required=True)
+    backup.add_argument("--review-database", type=Path, required=True)
+    backup.add_argument("--output", type=Path, required=True)
+    backup_verify = operations_commands.add_parser("verify-backup")
+    backup_verify.add_argument("directory", type=Path)
+
     return parser
 
 
@@ -172,6 +182,15 @@ def main(argv: list[str] | None = None) -> int:
         if result["status"] != "PASS":
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
             return 6
+    elif args.command == "operations" and args.operations_command == "backup":
+        result = backup_state(
+            {"jobs": args.job_database, "reviews": args.review_database}, args.output
+        )
+    elif args.command == "operations" and args.operations_command == "verify-backup":
+        result = verify_backup(args.directory)
+        if result["status"] != "PASS":
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 7
     else:  # pragma: no cover - argparse prevents this branch
         raise AssertionError("unreachable command")
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
