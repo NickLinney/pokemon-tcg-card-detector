@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import csv
 from pathlib import Path
 from typing import Any
 
@@ -112,10 +113,18 @@ class ReviewStore:
                 connection.execute(
                     """
                     INSERT OR IGNORE INTO review_cases (
-                        review_id, run_id, location_id, state, evidence_version, read_model_json
-                    ) VALUES (?, ?, ?, 'REQUIRED', ?, ?)
+                        review_id, run_id, collection_id, location_id, state,
+                        evidence_version, read_model_json
+                    ) VALUES (?, ?, ?, ?, 'REQUIRED', ?, ?)
                     """,
-                    (review_id, summary["run_id"], stable_location, evidence_version, serialized),
+                    (
+                        review_id,
+                        summary["run_id"],
+                        context["collection_id"],
+                        stable_location,
+                        evidence_version,
+                        serialized,
+                    ),
                 )
                 indexed.append(review_id)
         return indexed
@@ -220,9 +229,38 @@ class ReviewStore:
                 "REQUEST_RECAPTURE": "RECAPTURE_REQUESTED",
                 "LEAVE_UNRESOLVED": "UNRESOLVED",
             }.get(action, "RESOLVED")
+            effective_state = self._effective_state(action, payload, read_model)
+            assertion = {
+                "schema_version": "superseding-assertion-v1",
+                "location_id": row["location_id"],
+                "source_disposition_id": body["disposition_id"],
+                "supersedes": row["current_assertion_id"],
+                "effective_state": effective_state,
+                "created_at": occurred_at,
+            }
+            assertion["assertion_id"] = f"sha256:{canonical_json_sha256(assertion)}"
             connection.execute(
-                "UPDATE review_cases SET state = ? WHERE review_id = ?",
-                (state, review_id),
+                """
+                INSERT INTO superseding_assertions (
+                    assertion_id, review_id, collection_id, location_id,
+                    created_at, assertion_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    assertion["assertion_id"],
+                    review_id,
+                    row["collection_id"],
+                    row["location_id"],
+                    occurred_at,
+                    json.dumps(assertion, ensure_ascii=False, sort_keys=True),
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE review_cases SET state = ?, current_assertion_id = ?
+                WHERE review_id = ?
+                """,
+                (state, assertion["assertion_id"], review_id),
             )
         return body
 
@@ -236,6 +274,122 @@ class ReviewStore:
                 (review_id,),
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
+
+    def assertions(self, review_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT assertion_json FROM superseding_assertions
+                WHERE review_id = ? ORDER BY created_at, assertion_id
+                """,
+                (review_id,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def effective_inventory(self, collection_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT a.assertion_json
+                FROM review_cases c
+                JOIN superseding_assertions a ON a.assertion_id = c.current_assertion_id
+                WHERE c.collection_id = ?
+                ORDER BY c.location_id
+                """,
+                (collection_id,),
+            ).fetchall()
+        items = []
+        for row in rows:
+            assertion = json.loads(row[0])
+            items.append(
+                {
+                    "location_id": assertion["location_id"],
+                    "assertion_id": assertion["assertion_id"],
+                    "effective_state": assertion["effective_state"],
+                }
+            )
+        body = {
+            "schema_version": "effective-inventory-projection-v1",
+            "projection_version": "effective-inventory-projector-v1",
+            "collection_id": collection_id,
+            "generated_at": utc_now(),
+            "items": items,
+        }
+        body["projection_id"] = f"sha256:{canonical_json_sha256(body)}"
+        return body
+
+    def export_effective_inventory(self, collection_id: str, directory: Path) -> dict[str, Path]:
+        directory = ensure_write_path(directory)
+        directory.mkdir(parents=True, exist_ok=False)
+        projection = self.effective_inventory(collection_id)
+        rows = [
+            {
+                "location_id": item["location_id"],
+                "assertion_id": item["assertion_id"],
+                "effective_state_json": json.dumps(
+                    item["effective_state"], ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                ),
+            }
+            for item in projection["items"]
+        ]
+        jsonl_path = directory / "effective-inventory.jsonl"
+        with jsonl_path.open("x", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        csv_path = directory / "effective-inventory.csv"
+        with csv_path.open("x", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=["location_id", "assertion_id", "effective_state_json"]
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        sqlite_path = directory / "effective-inventory.sqlite3"
+        with sqlite3.connect(sqlite_path) as connection:
+            connection.execute(
+                """
+                CREATE TABLE effective_inventory (
+                    location_id TEXT PRIMARY KEY,
+                    assertion_id TEXT NOT NULL,
+                    effective_state_json TEXT NOT NULL
+                )
+                """
+            )
+            connection.executemany(
+                "INSERT INTO effective_inventory VALUES (?, ?, ?)",
+                [tuple(row.values()) for row in rows],
+            )
+        return {"csv": csv_path, "jsonl": jsonl_path, "sqlite": sqlite_path}
+
+    @staticmethod
+    def _effective_state(
+        action: str, payload: dict[str, Any], read_model: dict[str, Any]
+    ) -> dict[str, Any]:
+        state: dict[str, Any] = {
+            "review_action": action,
+            "automated_decision_state": read_model.get("decision", {}).get("state"),
+        }
+        if action in {"SELECT_CANDIDATE", "MANUAL_ASSERTION"}:
+            state.update(
+                identification_state="CONFIRMED_HUMAN",
+                canonical_reference_id=payload["identity_assertion"]["reference_card_id"],
+                printing_assertion=payload.get("printing_assertion"),
+            )
+        elif action == "REJECT_ALL":
+            state.update(
+                identification_state="NO_REFERENCE_MATCH_HUMAN",
+                canonical_reference_id=None,
+            )
+        elif action == "REQUEST_RECAPTURE":
+            state.update(identification_state="RECAPTURE_REQUESTED", canonical_reference_id=None)
+        elif action == "LEAVE_UNRESOLVED":
+            state.update(identification_state="AMBIGUOUS", canonical_reference_id=None)
+        else:
+            state.update(
+                identification_state="FIELD_CORRECTED_HUMAN",
+                canonical_reference_id=None,
+                field_correction=payload.get("field_correction"),
+            )
+        return state
 
     @staticmethod
     def _validate_action(
@@ -267,6 +421,7 @@ class ReviewStore:
                 CREATE TABLE IF NOT EXISTS review_cases (
                     review_id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL,
+                    collection_id TEXT,
                     location_id TEXT NOT NULL,
                     state TEXT NOT NULL,
                     evidence_version TEXT NOT NULL,
@@ -283,6 +438,8 @@ class ReviewStore:
                 connection.execute(
                     "ALTER TABLE review_cases ADD COLUMN current_assertion_id TEXT"
                 )
+            if "collection_id" not in columns:
+                connection.execute("ALTER TABLE review_cases ADD COLUMN collection_id TEXT")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS review_dispositions (
@@ -290,6 +447,19 @@ class ReviewStore:
                     review_id TEXT NOT NULL,
                     occurred_at TEXT NOT NULL,
                     disposition_json TEXT NOT NULL,
+                    FOREIGN KEY(review_id) REFERENCES review_cases(review_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS superseding_assertions (
+                    assertion_id TEXT PRIMARY KEY,
+                    review_id TEXT NOT NULL,
+                    collection_id TEXT NOT NULL,
+                    location_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    assertion_json TEXT NOT NULL,
                     FOREIGN KEY(review_id) REFERENCES review_cases(review_id)
                 )
                 """

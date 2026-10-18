@@ -325,6 +325,20 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return jsonify(error="invalid_review_disposition", message=str(exc)), 400
         return jsonify(disposition), 201
 
+    @app.get("/v1/inventories/<collection_id>")
+    def get_effective_inventory(collection_id: str) -> tuple[Any, int]:
+        try:
+            validate_collection_context(
+                {
+                    "collection_id": collection_id,
+                    "binder_id": "query",
+                    "page_id": "query",
+                }
+            )
+        except ValueError as exc:
+            return jsonify(error="invalid_collection_id", message=str(exc)), 400
+        return jsonify(review_store.effective_inventory(collection_id)), 200
+
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
         _launch_job(app, job_id)
     return app

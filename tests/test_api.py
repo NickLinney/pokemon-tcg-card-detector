@@ -352,6 +352,11 @@ def test_review_disposition_requires_auth_and_rejects_stale_evidence(tmp_path: P
     assert accepted.status_code == 201
     assert accepted.get_json()["actor_id"] == "local:reviewer-1"
     assert accepted.get_json()["identity_assertion"]["reference_card_id"] == "tcgdex:sv1:001"
+    inventory = client.get("/v1/inventories/collection-1")
+    assert inventory.status_code == 200
+    assert inventory.get_json()["items"][0]["effective_state"][
+        "canonical_reference_id"
+    ] == "tcgdex:sv1:001"
 
 
 def bytes_io(value: bytes):
