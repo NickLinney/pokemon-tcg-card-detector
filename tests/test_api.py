@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 
 from ptcg.api import create_app
 from ptcg.evidence import ContentAddressedArtifactStore
@@ -253,6 +254,56 @@ def test_run_and_artifact_enumeration_require_sealed_index(tmp_path: Path, monke
     assert listed.status_code == 200
     assert listed.get_json()["artifacts"][0]["role"] == "inventory-csv"
     assert client.get("/v1/runs/run-missing").status_code == 404
+
+
+def test_artifact_download_matches_sealed_digest_and_supports_ranges(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    run = tmp_path / "runs" / "run-download-fixture"
+    run.mkdir(parents=True)
+    (run / "page-summary.json").write_text("{}", encoding="utf-8")
+    payload = b"collection_id,pocket_index\nc1,1\n"
+    store = ContentAddressedArtifactStore(run / "artifacts")
+    ref = store.put_bytes(payload, media_type="text/csv", role="inventory-csv")
+    seal_artifact_index(
+        run,
+        [{**ref, "safe_filename": "inventory.csv", "downloadable": True}],
+    )
+    artifact_id = ref["artifact_id"]
+    url = f"/v1/runs/{run.name}/artifacts/{artifact_id}"
+    response = app.test_client().get(url)
+    assert response.status_code == 200
+    assert response.data == payload
+    assert response.headers["X-Content-SHA256"] == hashlib.sha256(payload).hexdigest()
+    assert response.headers["Content-Type"].startswith("text/csv")
+    assert "inventory.csv" in response.headers["Content-Disposition"]
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+    partial = app.test_client().get(url, headers={"Range": "bytes=0-9"})
+    assert partial.status_code == 206
+    assert partial.data == payload[:10]
+    assert app.test_client().get(
+        f"/v1/runs/{run.name}/artifacts/sha256:{'f' * 64}"
+    ).status_code == 404
+
+
+def test_artifact_download_detects_tampered_bytes(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    run = tmp_path / "runs" / "run-tamper-fixture"
+    run.mkdir(parents=True)
+    (run / "page-summary.json").write_text("{}", encoding="utf-8")
+    store = ContentAddressedArtifactStore(run / "artifacts")
+    ref = store.put_bytes(b"original", media_type="text/csv", role="inventory-csv")
+    seal_artifact_index(
+        run,
+        [{**ref, "safe_filename": "inventory.csv", "downloadable": True}],
+    )
+    artifact_path = run / ref["path"]
+    artifact_path.write_bytes(b"tampered")
+    response = app.test_client().get(
+        f"/v1/runs/{run.name}/artifacts/{ref['artifact_id']}"
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "artifact_integrity_failure"
 
 
 def bytes_io(value: bytes):
