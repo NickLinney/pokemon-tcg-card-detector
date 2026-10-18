@@ -16,6 +16,12 @@ services:
       PTCG_TEMPLATE_ROOT: /opt/app/templates
       PTCG_OUTPUT_ROOT: /workspace/.local/runs
       PTCG_UPLOAD_ROOT: /workspace/.local/uploads
+      PTCG_JOB_DATABASE: /workspace/.local/jobs/jobs.sqlite3
+      PTCG_REVIEW_DATABASE: /workspace/.local/reviews/reviews.sqlite3
+      PTCG_JOB_WORKERS: "1"
+      PTCG_MAX_ACTIVE_JOBS: "4"
+      PTCG_RECOVER_JOBS: "true"
+      PTCG_REVIEW_TOKEN: ${PTCG_REVIEW_TOKEN:-}
       PTCG_MODEL_DIRECTORY: /workspace/.models/easyocr
       PTCG_DOWNLOAD_OCR_MODELS: "false"
     ports:
@@ -38,6 +44,7 @@ services:
     image: pokemon-tcg-card-detector:local
     environment:
       PTCG_PROJECT_ROOT: /workspace
+      PTCG_REVIEW_DATABASE: /workspace/.local/reviews/reviews.sqlite3
     volumes:
       - ../.local:/workspace/.local
       - ../.models:/workspace/.models:ro
