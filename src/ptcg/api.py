@@ -14,6 +14,7 @@ from .pipeline import PIPELINE_VERSION
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
 from .util import ensure_write_path, project_root
+from .version import version_metadata
 
 
 ALLOWED_IMAGE_SUFFIXES = {".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
@@ -44,7 +45,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/healthz")
     def health() -> tuple[Any, int]:
-        return jsonify(status="ok", pipeline_version=PIPELINE_VERSION), 200
+        return jsonify(status="ok", pipeline_version=PIPELINE_VERSION, **version_metadata()), 200
+
+    @app.get("/v1/meta")
+    def metadata() -> tuple[Any, int]:
+        return jsonify(pipeline_version=PIPELINE_VERSION, **version_metadata()), 200
 
     @app.get("/readyz")
     def readiness() -> tuple[Any, int]:

@@ -1,3 +1,5 @@
 """Local, evidence-preserving Pokemon TCG card detection pipeline."""
 
-__version__ = "0.0.0"
+from .version import PYTHON_DISTRIBUTION_VERSION
+
+__version__ = PYTHON_DISTRIBUTION_VERSION

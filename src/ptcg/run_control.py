@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .util import canonical_json_sha256, ensure_write_path, utc_now
+from .version import CANONICAL_VERSION, LIFECYCLE, PYTHON_DISTRIBUTION_VERSION
 
 
 RUN_MANIFEST_SCHEMA_VERSION = "run-manifest-v1"
@@ -52,6 +53,9 @@ class RunManifest:
     ) -> "RunManifest":
         configuration_digest = canonical_json_sha256(configuration)
         bindings = {
+            "product_version": CANONICAL_VERSION,
+            "python_distribution_version": PYTHON_DISTRIBUTION_VERSION,
+            "lifecycle": LIFECYCLE,
             "source_sha256": source_sha256,
             "corpus_sha256": corpus_sha256,
             "template_registry_sha256": template_registry_sha256,

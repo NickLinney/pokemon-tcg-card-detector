@@ -24,6 +24,8 @@ def test_run_manifest_identity_is_deterministic_and_key_is_not_retained():
     second = _manifest()
     assert first.digest == second.digest
     assert first.payload["bindings"]["idempotency_key_sha256"]
+    assert first.payload["bindings"]["product_version"] == "0.2.0-pre-alpha.2"
+    assert first.payload["bindings"]["lifecycle"] == "PRE_ALPHA"
     assert "fixture-key" not in json.dumps(first.payload)
 
 
