@@ -17,6 +17,8 @@
     "zone_coverage": {"type": "object"},
     "candidates": {"type": "array", "items": {"type": "object"}},
     "limitations": {"type": "array", "items": {"type": "string"}}
+    ,"current_assertion_id": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+    ,"dispositions": {"type": "array", "items": {"type": "object"}}
   },
   "additionalProperties": false
 }
