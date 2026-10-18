@@ -66,6 +66,26 @@ PYTHONPATH=src ../.venv/bin/python -m ptcg evidence verify \
 PYTHONPATH=src ../.venv/bin/python -m pytest -q
 ```
 
+The local review workflow is also keyboard-operable through the same core. It
+requires an explicit actor and authority scope and preserves the evidence
+version and prior-assertion token:
+
+```bash
+PYTHONPATH=src ../.venv/bin/python -m ptcg review list \
+  --database ../.local/reviews/reviews.sqlite3 --state required
+
+PYTHONPATH=src ../.venv/bin/python -m ptcg review show REVIEW_ID \
+  --database ../.local/reviews/reviews.sqlite3
+
+PYTHONPATH=src ../.venv/bin/python -m ptcg inventory export COLLECTION_ID \
+  --database ../.local/reviews/reviews.sqlite3 \
+  --output ../.local/effective-inventory/EXPORT_ID
+```
+
+`review decide` supports the same actions as the HTTP contract. CLI output
+always includes content-addressed disposition identity; the UI/CLI is not the
+system of record.
+
 The same analysis use case is available to Python callers through
 `ptcg.service.analyze_page_request`. An optional local Flask adapter is installed
 with the API extra:
