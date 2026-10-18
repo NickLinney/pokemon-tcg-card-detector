@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -19,7 +20,12 @@ from .run_catalog import (
     RunNotFound,
     RunNotSealed,
 )
-from .reviews import ReviewNotFound, ReviewStore
+from .reviews import (
+    ReviewConflict,
+    ReviewNotFound,
+    ReviewStore,
+    ReviewValidationError,
+)
 from .jobs import CapacityExceeded, IdempotencyConflict, JobNotFound, JobService, JobStore
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
@@ -56,6 +62,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         REVIEW_DATABASE=os.environ.get(
             "PTCG_REVIEW_DATABASE", str(root / ".local" / "reviews" / "reviews.sqlite3")
         ),
+        REVIEW_TOKEN=os.environ.get("PTCG_REVIEW_TOKEN"),
         MAX_CONTENT_LENGTH=int(
             os.environ.get("PTCG_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
         ),
@@ -288,6 +295,35 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return jsonify(review_store.get(review_id)), 200
         except ReviewNotFound:
             return jsonify(error="review_not_found"), 404
+
+    @app.post("/v1/reviews/<review_id>/dispositions")
+    def create_review_disposition(review_id: str) -> tuple[Any, int]:
+        configured_token = app.config.get("REVIEW_TOKEN")
+        if not configured_token:
+            return jsonify(error="review_writes_disabled"), 503
+        authorization = request.headers.get("Authorization", "")
+        supplied_token = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
+        if not supplied_token or not hmac.compare_digest(supplied_token, configured_token):
+            return jsonify(error="review_authentication_required"), 401
+        actor_id = request.headers.get("X-PTCG-Actor", "")
+        authority_scope = request.headers.get("X-PTCG-Authority-Scope", "")
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(error="invalid_review_disposition", message="JSON object required"), 400
+        try:
+            disposition = review_store.append_disposition(
+                review_id,
+                actor_id=actor_id,
+                authority_scope=authority_scope,
+                payload=payload,
+            )
+        except ReviewNotFound:
+            return jsonify(error="review_not_found"), 404
+        except ReviewConflict as exc:
+            return jsonify(error="review_conflict", message=str(exc)), 409
+        except ReviewValidationError as exc:
+            return jsonify(error="invalid_review_disposition", message=str(exc)), 400
+        return jsonify(disposition), 201
 
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
         _launch_job(app, job_id)

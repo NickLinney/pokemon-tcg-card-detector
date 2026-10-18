@@ -23,6 +23,7 @@ def _configured_app(tmp_path: Path, monkeypatch):
             "RECOVER_JOBS": False,
             "MAX_ACTIVE_JOBS": 4,
             "REVIEW_DATABASE": str(tmp_path / "reviews" / "reviews.sqlite3"),
+            "REVIEW_TOKEN": "fixture-review-token",
             "OCR_MODE": "none",
         }
     )
@@ -319,6 +320,38 @@ def test_review_queue_and_detail_endpoints(tmp_path: Path, monkeypatch):
     assert detail.status_code == 200
     assert detail.get_json()["evidence_version"].startswith("sha256:")
     assert app.test_client().get("/v1/reviews/review-missing").status_code == 404
+
+
+def test_review_disposition_requires_auth_and_rejects_stale_evidence(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    run = build_review_run(tmp_path)
+    review_id = app.extensions["ptcg_review_store"].index_run(run)[0]
+    client = app.test_client()
+    payload = {
+        "action": "SELECT_CANDIDATE",
+        "reason": "Candidate agrees with reviewed title and collector number.",
+        "identity_assertion": {"reference_card_id": "tcgdex:sv1:001"},
+        "printing_assertion": None,
+        "field_correction": None,
+        "evidence_version": "sha256:" + "0" * 64,
+        "expected_prior_assertion": None,
+    }
+    url = f"/v1/reviews/{review_id}/dispositions"
+    assert client.post(url, json=payload).status_code == 401
+    headers = {
+        "Authorization": "Bearer fixture-review-token",
+        "X-PTCG-Actor": "local:reviewer-1",
+        "X-PTCG-Authority-Scope": "collection-1",
+    }
+    stale = client.post(url, json=payload, headers=headers)
+    assert stale.status_code == 409
+    payload["evidence_version"] = app.extensions["ptcg_review_store"].get(review_id)[
+        "evidence_version"
+    ]
+    accepted = client.post(url, json=payload, headers=headers)
+    assert accepted.status_code == 201
+    assert accepted.get_json()["actor_id"] == "local:reviewer-1"
+    assert accepted.get_json()["identity_assertion"]["reference_card_id"] == "tcgdex:sv1:001"
 
 
 def bytes_io(value: bytes):
