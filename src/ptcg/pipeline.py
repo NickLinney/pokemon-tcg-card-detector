@@ -52,7 +52,7 @@ def analyze_page(
     ocr_provider: OCRProvider,
     *,
     idempotency_key: str | None = None,
-    context: dict[str, Any] | None = None,
+    collection_context: dict[str, Any] | None = None,
     cancel_check: Callable[[], None] | None = None,
     symbol_provider: SymbolProvider | None = None,
 ) -> dict[str, Any]:
@@ -61,7 +61,11 @@ def analyze_page(
     template_root = template_root.resolve(strict=True)
     source_hash = sha256_file(image_path)
     database_hash = sha256_file(database_path)
-    context = validate_collection_context(context) if context is not None else default_sample_context()
+    collection_context = (
+        validate_collection_context(collection_context)
+        if collection_context is not None
+        else default_sample_context()
+    )
     cancel_check = cancel_check or (lambda: None)
     symbol_provider = symbol_provider or UnsupportedSymbolProvider()
     cancel_check()
@@ -78,7 +82,7 @@ def analyze_page(
         "network_acquisition": False,
         "automatic_confirmation": False,
         "zone_crop_policy": "all-declared-applicable-priors",
-        "collection_context": context,
+        "collection_context": collection_context,
     }
     manifest = RunManifest.build(
         source_sha256=source_hash,
@@ -219,9 +223,9 @@ def analyze_page(
         )
 
         store = ReferenceStore(database_path)
-        for context in card_contexts:
-            prediction = context["classification"]["template_hypotheses"][0]
-            observations = context["observations"]
+        for card_context in card_contexts:
+            prediction = card_context["classification"]["template_hypotheses"][0]
+            observations = card_context["observations"]
             initial_candidates = retrieve_candidates(store, observations, prediction, limit=25)
             discriminator = select_discriminator(initial_candidates, observations)
             if (
@@ -230,17 +234,17 @@ def analyze_page(
                 and not observations["collector_number"]["extractor_attempts"]
             ):
                 _extract_ocr_zone(
-                    context["detected"].normalized,
-                    context["selected_template"],
+                    card_context["detected"].normalized,
+                    card_context["selected_template"],
                     observations,
                     "collector_number",
                     ocr_provider,
                     allowlist="0123456789/／",
                     parser=parse_collector_number,
                 )
-            context["initial_candidates"] = initial_candidates
-            context["discriminator"] = discriminator
-            context["candidates"] = retrieve_candidates(
+            card_context["initial_candidates"] = initial_candidates
+            card_context["discriminator"] = discriminator
+            card_context["candidates"] = retrieve_candidates(
                 store, observations, prediction, limit=25
             )
 
@@ -255,12 +259,12 @@ def analyze_page(
 
         card_packages: list[dict[str, Any]] = []
         inventory_rows: list[dict[str, Any]] = []
-        for context in card_contexts:
-            detected = context["detected"]
-            classification = context["classification"]
-            selected_template = context["selected_template"]
-            observations = context["observations"]
-            candidates = context["candidates"]
+        for card_context in card_contexts:
+            detected = card_context["detected"]
+            classification = card_context["classification"]
+            selected_template = card_context["selected_template"]
+            observations = card_context["observations"]
+            candidates = card_context["candidates"]
             decision = decide(candidates, detected.quality)
             image_evidence = {
                 "state": "reference_image_unavailable",
@@ -279,12 +283,12 @@ def analyze_page(
                 "card_face_observation": {
                     "pocket_index": detected.pocket_index,
                     "source_polygon": detected.source_polygon,
-                    "normalized_crop_artifact": context["normalized_ref"],
+                    "normalized_crop_artifact": card_context["normalized_ref"],
                     "orientation": "portrait",
                     "geometry_method": detected.geometry_method,
                     "quality": detected.quality,
-                    "visual_features": context["features"],
-                    "script_observation": context["script"],
+                    "visual_features": card_context["features"],
+                    "script_observation": card_context["script"],
                     "template_classification": classification,
                     "template_predictions": classification["template_hypotheses"],
                     "localization_template_id": selected_template["template_id"],
@@ -307,7 +311,7 @@ def analyze_page(
                 },
                 "candidate_assessments": candidates,
                 "discriminator_plan": {
-                    "selected_zone": context["discriminator"],
+                    "selected_zone": card_context["discriminator"],
                     "strategy": "greatest available identifier value among unresolved candidates",
                     "bounded_rounds": 1,
                     "termination_reason": "single-round Pre-Alpha discriminator budget exhausted",
@@ -340,11 +344,11 @@ def analyze_page(
             )
             inventory_rows.append(
                 {
-                    "collection_id": context["collection_id"],
-                    "binder_id": context["binder_id"],
-                    "page_id": context["page_id"],
+                    "collection_id": collection_context["collection_id"],
+                    "binder_id": collection_context["binder_id"],
+                    "page_id": collection_context["page_id"],
                     "pocket_index": detected.pocket_index,
-                    "location_id": location_id(context, detected.pocket_index),
+                    "location_id": location_id(collection_context, detected.pocket_index),
                     "canonical_reference_id": decision["selected_reference_card_id"],
                     "display_name": selected.get("display_name") if selected else None,
                     "set_id": selected.get("set_id") if selected else None,
@@ -385,7 +389,7 @@ def analyze_page(
             "run_state": ledger.state,
             "run_manifest_id": manifest.payload["manifest_id"],
             "pipeline_version": PIPELINE_VERSION,
-            "collection_context": context,
+            "collection_context": collection_context,
             "source": {
                 "artifact": source_artifact,
                 "sha256": source_hash,
