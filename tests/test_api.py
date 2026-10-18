@@ -16,6 +16,7 @@ def _configured_app(tmp_path: Path, monkeypatch):
             "OUTPUT_ROOT": str(tmp_path / "runs"),
             "UPLOAD_ROOT": str(tmp_path / "uploads"),
             "JOB_DATABASE": str(tmp_path / "jobs" / "jobs.sqlite3"),
+            "RECOVER_JOBS": False,
             "OCR_MODE": "none",
         }
     )

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from .audit import verify_run
 from .util import canonical_json_sha256, ensure_write_path, sha256_file, utc_now
 from .workflow import validate_collection_context
 
@@ -146,6 +147,44 @@ class JobStore:
                 (job_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def recover_interrupted(self) -> list[str]:
+        """Move interrupted work to explicit recoverable states and return work to relaunch."""
+        relaunch: list[str] = []
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT job_id, state FROM analysis_jobs
+                WHERE state IN ('ADMITTED', 'RUNNING', 'CANCEL_REQUESTED')
+                ORDER BY created_at, job_id
+                """
+            ).fetchall()
+            for row in rows:
+                job_id, state = row["job_id"], row["state"]
+                if state == "RUNNING":
+                    self._transition_in_transaction(
+                        connection,
+                        job_id,
+                        "RECOVERY_REQUIRED",
+                        "process restart interrupted running worker",
+                    )
+                    self._transition_in_transaction(
+                        connection,
+                        job_id,
+                        "ADMITTED",
+                        "durable source and context are eligible for bounded replay",
+                    )
+                    relaunch.append(job_id)
+                elif state == "CANCEL_REQUESTED":
+                    self._transition_in_transaction(
+                        connection,
+                        job_id,
+                        "CANCELED",
+                        "restart completed a previously recorded cancellation request",
+                    )
+                else:
+                    relaunch.append(job_id)
+        return relaunch
 
     def _transition_in_transaction(
         self,
@@ -326,9 +365,40 @@ class JobService:
                 error={"type": type(exc).__name__, "message": str(exc)},
             )
             return
+        try:
+            _verify_completed_run(result)
+        except Exception as exc:
+            self.store.transition(
+                job_id,
+                "FAILED",
+                reason="analysis returned before required evidence sealed",
+                error={"type": type(exc).__name__, "message": str(exc)},
+            )
+            return
         self.store.transition(
             job_id,
             "SUCCEEDED",
             reason="run manifest and required outputs sealed",
             run_id=result["run_id"],
         )
+
+
+def _verify_completed_run(result: dict[str, Any]) -> None:
+    run_directory_value = result.get("run_directory")
+    if not isinstance(run_directory_value, str):
+        raise ValueError("analysis result has no run_directory")
+    run_directory = Path(run_directory_value).resolve(strict=True)
+    if result.get("run_id") != run_directory.name:
+        raise ValueError("analysis run_id does not match run directory")
+    for name in (
+        "run-manifest.json",
+        "page-summary.json",
+        "inventory.csv",
+        "inventory.jsonl",
+        "inventory.sqlite3",
+    ):
+        if not (run_directory / name).is_file():
+            raise ValueError(f"required sealed output is missing: {name}")
+    audit = verify_run(run_directory)
+    if audit["status"] != "PASS":
+        raise ValueError(f"run integrity audit failed: {audit['findings']}")
