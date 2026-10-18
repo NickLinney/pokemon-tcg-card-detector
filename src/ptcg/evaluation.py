@@ -183,3 +183,122 @@ def score_template_classification(
         "calibration_state": "UNCALIBRATED",
         "claim_state": "EVIDENCE_REQUIRED" if missing or not evaluated else "MEASURED",
     }
+
+
+def score_zone_localization(
+    registry: GroundTruthRegistry,
+    predictions: list[dict[str, Any]],
+    *,
+    split: str = "evaluation",
+    minimum_stratum_size: int = 5,
+    keypoint_tolerance: float = 0.05,
+) -> dict[str, Any]:
+    fixtures = registry.qualified(split=split, permitted_use="EVALUATION")
+    prediction_by_id = {item["fixture_id"]: item for item in predictions}
+    totals = {"tp": 0, "fp": 0, "fn": 0, "iou_sum": 0.0, "iou_count": 0, "keypoint_hits": 0, "keypoint_count": 0}
+    status_counts: dict[str, int] = {}
+    strata: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for fixture in fixtures:
+        prediction = prediction_by_id.get(fixture["fixture_id"])
+        if prediction is None:
+            missing.append(fixture["fixture_id"])
+            continue
+        truth = fixture.get("truth", {})
+        truth_zones = truth.get("zones", {})
+        predicted_zones = prediction.get("zones", {})
+        for zone_id in sorted(set(truth_zones) | set(predicted_zones)):
+            expected = truth_zones.get(zone_id, {"present": False})
+            observed = predicted_zones.get(zone_id, {"present": False, "status": "UNDECLARED"})
+            expected_present = bool(expected.get("present"))
+            observed_present = bool(observed.get("present"))
+            if expected_present and observed_present:
+                totals["tp"] += 1
+            elif observed_present:
+                totals["fp"] += 1
+            elif expected_present:
+                totals["fn"] += 1
+            status = str(observed.get("status", "UNKNOWN"))
+            status_counts[status] = status_counts.get(status, 0) + 1
+            iou = _rect_iou(expected.get("rect"), observed.get("rect"))
+            if iou is not None:
+                totals["iou_sum"] += iou
+                totals["iou_count"] += 1
+            keypoint_hit = _keypoint_hit(
+                expected.get("keypoint"), observed.get("keypoint"), keypoint_tolerance
+            )
+            if keypoint_hit is not None:
+                totals["keypoint_count"] += 1
+                totals["keypoint_hits"] += int(keypoint_hit)
+            stratum_name = "/".join(
+                (
+                    str(truth.get("template_stratum", "UNKNOWN_TEMPLATE")),
+                    str(expected.get("zone_type", zone_id)),
+                )
+            )
+            bucket = strata.setdefault(stratum_name, {"count": 0, "tp": 0})
+            bucket["count"] += 1
+            bucket["tp"] += int(expected_present and observed_present)
+    precision_denominator = totals["tp"] + totals["fp"]
+    recall_denominator = totals["tp"] + totals["fn"]
+    stratum_results = {
+        name: {
+            **bucket,
+            "presence_recall": bucket["tp"] / bucket["count"] if bucket["count"] else None,
+            "evidence_state": (
+                "MEASURED" if bucket["count"] >= minimum_stratum_size else "EVIDENCE_REQUIRED"
+            ),
+        }
+        for name, bucket in sorted(strata.items())
+    }
+    return {
+        "schema_version": "zone-localization-scorecard-v1",
+        "registry_id": registry.payload.get("registry_id"),
+        "fixture_split": split,
+        "presence_precision": (
+            totals["tp"] / precision_denominator if precision_denominator else None
+        ),
+        "presence_recall": totals["tp"] / recall_denominator if recall_denominator else None,
+        "mean_iou": totals["iou_sum"] / totals["iou_count"] if totals["iou_count"] else None,
+        "keypoint_tolerance": keypoint_tolerance,
+        "keypoint_accuracy": (
+            totals["keypoint_hits"] / totals["keypoint_count"]
+            if totals["keypoint_count"]
+            else None
+        ),
+        "localization_status_counts": dict(sorted(status_counts.items())),
+        "strata": stratum_results,
+        "missing_predictions": sorted(missing),
+        "claim_state": "EVIDENCE_REQUIRED" if missing or not fixtures else "MEASURED",
+    }
+
+
+def _rect_iou(expected: Any, observed: Any) -> float | None:
+    if not (
+        isinstance(expected, list)
+        and isinstance(observed, list)
+        and len(expected) == len(observed) == 4
+    ):
+        return None
+    ex1, ey1, ex2, ey2 = map(float, expected)
+    ox1, oy1, ox2, oy2 = map(float, observed)
+    intersection = max(0.0, min(ex2, ox2) - max(ex1, ox1)) * max(
+        0.0, min(ey2, oy2) - max(ey1, oy1)
+    )
+    union = max(0.0, ex2 - ex1) * max(0.0, ey2 - ey1) + max(
+        0.0, ox2 - ox1
+    ) * max(0.0, oy2 - oy1) - intersection
+    return intersection / union if union else 0.0
+
+
+def _keypoint_hit(expected: Any, observed: Any, tolerance: float) -> bool | None:
+    if not (
+        isinstance(expected, list)
+        and isinstance(observed, list)
+        and len(expected) == len(observed) == 2
+    ):
+        return None
+    distance_squared = (float(expected[0]) - float(observed[0])) ** 2 + (
+        float(expected[1]) - float(observed[1])
+    ) ** 2
+    return distance_squared <= tolerance**2

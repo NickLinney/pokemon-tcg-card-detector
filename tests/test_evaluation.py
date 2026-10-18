@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from ptcg.evaluation import GroundTruthRegistry, score_template_classification
+from ptcg.evaluation import (
+    GroundTruthRegistry,
+    score_template_classification,
+    score_zone_localization,
+)
 
 
 def fixture(identifier: str, digest: str, *, split="evaluation", rights="APPROVED", annotation="ADJUDICATED"):
@@ -73,3 +77,37 @@ def test_template_scorecard_reports_top_k_subtype_abstention_and_sparse_strata()
     assert scorecard["confusion"]["trainer"]["ABSTAIN"] == 1
     assert scorecard["strata"]["en-modern"]["evidence_state"] == "EVIDENCE_REQUIRED"
     assert scorecard["calibration_state"] == "UNCALIBRATED"
+
+
+def test_zone_scorecard_separates_presence_geometry_and_status():
+    item = fixture("zones", "3" * 64)
+    item["truth"].update(
+        template_stratum="pokemon-modern",
+        zones={
+            "title": {"present": True, "zone_type": "text", "rect": [0.0, 0.0, 0.5, 0.2]},
+            "set_symbol": {"present": True, "zone_type": "symbol", "keypoint": [0.8, 0.8]},
+            "absent_rule": {"present": False, "zone_type": "rule_box"},
+        },
+    )
+    registry = GroundTruthRegistry.build([item])
+    scorecard = score_zone_localization(
+        registry,
+        [
+            {
+                "fixture_id": "zones",
+                "zones": {
+                    "title": {"present": True, "status": "INDEPENDENTLY_LOCALIZED", "rect": [0.0, 0.0, 0.5, 0.2]},
+                    "set_symbol": {"present": True, "status": "FALLBACK_USED", "keypoint": [0.82, 0.81]},
+                    "absent_rule": {"present": True, "status": "INHERITED_PRIOR"},
+                },
+            }
+        ],
+        minimum_stratum_size=2,
+        keypoint_tolerance=0.05,
+    )
+    assert scorecard["presence_precision"] == 2 / 3
+    assert scorecard["presence_recall"] == 1.0
+    assert scorecard["mean_iou"] == 1.0
+    assert scorecard["keypoint_accuracy"] == 1.0
+    assert scorecard["localization_status_counts"]["FALLBACK_USED"] == 1
+    assert scorecard["strata"]["pokemon-modern/symbol"]["evidence_state"] == "EVIDENCE_REQUIRED"
