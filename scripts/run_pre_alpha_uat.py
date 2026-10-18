@@ -61,9 +61,10 @@ def main() -> int:
     if submitted.status_code != 202:
         return _finish(args.report, {"status": "FAIL", "stage": "submit", "response": submitted.get_json()})
     job = submitted.get_json()
+    status_url = job["status_url"]
     deadline = time.monotonic() + args.timeout_seconds
     while time.monotonic() < deadline:
-        current = client.get(job["status_url"])
+        current = client.get(status_url)
         if current.status_code != 200:
             return _finish(args.report, {"status": "FAIL", "stage": "job-status"})
         job = current.get_json()
