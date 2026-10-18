@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from .pipeline import PIPELINE_VERSION
 from .run_catalog import (
+    ArtifactNotFound,
     ArtifactIntegrityFailure,
     RunCatalog,
     RunNotFound,
@@ -239,6 +240,30 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         except ArtifactIntegrityFailure as exc:
             return jsonify(error="run_integrity_failure", message=str(exc)), 409
         return jsonify(index), 200
+
+    @app.get("/v1/runs/<run_id>/artifacts/<artifact_id>")
+    def download_run_artifact(run_id: str, artifact_id: str):
+        try:
+            descriptor, path = run_catalog.resolve_artifact(run_id, artifact_id)
+        except (RunNotFound, ArtifactNotFound):
+            return jsonify(error="artifact_not_found"), 404
+        except RunNotSealed:
+            return jsonify(error="run_not_sealed"), 409
+        except ArtifactIntegrityFailure as exc:
+            return jsonify(error="artifact_integrity_failure", message=str(exc)), 409
+        response = send_file(
+            path,
+            mimetype=descriptor["media_type"],
+            as_attachment=True,
+            download_name=descriptor["safe_filename"],
+            conditional=True,
+            etag=descriptor["sha256"],
+            max_age=0,
+        )
+        response.headers["X-Content-SHA256"] = descriptor["sha256"]
+        response.headers["X-Artifact-ID"] = descriptor["artifact_id"]
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
         _launch_job(app, job_id)
