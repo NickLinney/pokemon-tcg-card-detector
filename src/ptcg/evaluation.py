@@ -302,3 +302,57 @@ def _keypoint_hit(expected: Any, observed: Any, tolerance: float) -> bool | None
         float(expected[1]) - float(observed[1])
     ) ** 2
     return distance_squared <= tolerance**2
+
+
+def score_typed_extraction(
+    registry: GroundTruthRegistry,
+    predictions: list[dict[str, Any]],
+    *,
+    split: str = "evaluation",
+) -> dict[str, Any]:
+    fixtures = registry.qualified(split=split, permitted_use="EVALUATION")
+    prediction_by_id = {item["fixture_id"]: item for item in predictions}
+    by_zone_type: dict[str, dict[str, int]] = {}
+    missing: list[str] = []
+    for fixture in fixtures:
+        prediction = prediction_by_id.get(fixture["fixture_id"])
+        if prediction is None:
+            missing.append(fixture["fixture_id"])
+            continue
+        truth_zones = fixture.get("truth", {}).get("zones", {})
+        observed_zones = prediction.get("zones", {})
+        for zone_id, truth in truth_zones.items():
+            zone_type = str(truth.get("zone_type", zone_id))
+            bucket = by_zone_type.setdefault(
+                zone_type,
+                {"total": 0, "correct": 0, "unsupported": 0, "no_signal": 0, "failed": 0},
+            )
+            bucket["total"] += 1
+            observed = observed_zones.get(zone_id, {"state": "UNSUPPORTED"})
+            state = observed.get("state")
+            if state == "SUCCEEDED":
+                bucket["correct"] += int(observed.get("typed_value") == truth.get("typed_value"))
+            elif state == "UNSUPPORTED":
+                bucket["unsupported"] += 1
+            elif state == "NO_SIGNAL":
+                bucket["no_signal"] += 1
+            else:
+                bucket["failed"] += 1
+    metrics = {}
+    for zone_type, bucket in sorted(by_zone_type.items()):
+        total = bucket["total"]
+        metrics[zone_type] = {
+            **bucket,
+            "typed_accuracy": bucket["correct"] / total if total else None,
+            "unsupported_rate": bucket["unsupported"] / total if total else None,
+            "no_signal_rate": bucket["no_signal"] / total if total else None,
+            "failure_rate": bucket["failed"] / total if total else None,
+        }
+    return {
+        "schema_version": "typed-extraction-scorecard-v1",
+        "registry_id": registry.payload.get("registry_id"),
+        "fixture_split": split,
+        "by_zone_type": metrics,
+        "missing_predictions": sorted(missing),
+        "claim_state": "EVIDENCE_REQUIRED" if missing or not fixtures else "MEASURED",
+    }
