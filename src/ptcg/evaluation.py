@@ -356,3 +356,98 @@ def score_typed_extraction(
         "missing_predictions": sorted(missing),
         "claim_state": "EVIDENCE_REQUIRED" if missing or not fixtures else "MEASURED",
     }
+
+
+def score_candidate_and_decision_safety(
+    registry: GroundTruthRegistry,
+    predictions: list[dict[str, Any]],
+    *,
+    split: str = "evaluation",
+    top_k: int = 5,
+) -> dict[str, Any]:
+    fixtures = registry.qualified(split=split, permitted_use="EVALUATION")
+    prediction_by_id = {item["fixture_id"]: item for item in predictions}
+    counts = {
+        "evaluated": 0,
+        "candidate_hits": 0,
+        "identity_correct": 0,
+        "printing_total": 0,
+        "printing_correct": 0,
+        "unresolved": 0,
+        "automatic_confirmations": 0,
+        "false_automatic_confirmations": 0,
+        "false_human_confirmations": 0,
+    }
+    missing: list[str] = []
+    for fixture in fixtures:
+        prediction = prediction_by_id.get(fixture["fixture_id"])
+        if prediction is None:
+            missing.append(fixture["fixture_id"])
+            continue
+        truth = fixture.get("truth", {})
+        expected_identity = truth.get("canonical_reference_id")
+        expected_printing = truth.get("printing_id")
+        candidates = prediction.get("candidate_ids", [])[:top_k]
+        state = prediction.get("decision_state")
+        selected_identity = prediction.get("selected_reference_card_id")
+        selected_printing = prediction.get("selected_printing_id")
+        counts["evaluated"] += 1
+        counts["candidate_hits"] += int(expected_identity in candidates)
+        counts["identity_correct"] += int(selected_identity == expected_identity)
+        if expected_printing is not None:
+            counts["printing_total"] += 1
+            counts["printing_correct"] += int(selected_printing == expected_printing)
+        counts["unresolved"] += int(
+            state
+            in {
+                "PROBABLE",
+                "AMBIGUOUS",
+                "INSUFFICIENT_EVIDENCE",
+                "CONFLICTING_EVIDENCE",
+                "NO_REFERENCE_MATCH",
+            }
+        )
+        if state == "CONFIRMED_AUTOMATIC":
+            counts["automatic_confirmations"] += 1
+            counts["false_automatic_confirmations"] += int(
+                selected_identity != expected_identity
+                or (
+                    expected_printing is not None
+                    and selected_printing != expected_printing
+                )
+            )
+        if state == "CONFIRMED_HUMAN":
+            counts["false_human_confirmations"] += int(
+                selected_identity != expected_identity
+                or (
+                    expected_printing is not None
+                    and selected_printing != expected_printing
+                )
+            )
+    evaluated = counts["evaluated"]
+    automatic = counts["automatic_confirmations"]
+    return {
+        "schema_version": "candidate-decision-safety-scorecard-v1",
+        "registry_id": registry.payload.get("registry_id"),
+        "fixture_split": split,
+        "top_k": top_k,
+        **counts,
+        "candidate_top_k_recall": counts["candidate_hits"] / evaluated if evaluated else None,
+        "exact_identity_rate": counts["identity_correct"] / evaluated if evaluated else None,
+        "exact_printing_rate": (
+            counts["printing_correct"] / counts["printing_total"]
+            if counts["printing_total"]
+            else None
+        ),
+        "unresolved_rate": counts["unresolved"] / evaluated if evaluated else None,
+        "false_automatic_confirmation_rate": (
+            counts["false_automatic_confirmations"] / automatic if automatic else 0.0
+        ),
+        "automatic_confirmation_policy": "PROHIBITED",
+        "automatic_confirmation_policy_test": (
+            "PASS" if automatic == 0 else "FAIL"
+        ),
+        "threshold_adoption": "NOT_ADOPTED",
+        "missing_predictions": sorted(missing),
+        "claim_state": "EVIDENCE_REQUIRED" if missing or not fixtures else "MEASURED",
+    }
