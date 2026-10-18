@@ -96,8 +96,13 @@ PTCG_DATABASE=../.local/corpus/tcgdex-v2.48.0-r3.sqlite3 \
   PYTHONPATH=src ../.venv/bin/python -m ptcg.api
 ```
 
-It exposes `/healthz`, `/readyz`, and synchronous `/v1/pages/analyze`. It has no
-authentication and is for local Pre-Alpha integration only.
+It exposes health/readiness, the primary durable `/v1/analysis-jobs` workflow,
+manifest-backed run/artifact downloads, review, and effective-inventory APIs.
+The synchronous `/v1/pages/analyze` endpoint remains deprecated compatibility
+surface only. Review writes are disabled unless `PTCG_REVIEW_TOKEN` is set and
+then require the bearer token plus explicit actor and authority-scope headers.
+The service remains loopback-only Pre-Alpha integration, not a shared network
+or production service.
 
 ## Containers
 
@@ -107,6 +112,13 @@ One image supports both transports. The Compose API is published on loopback:
 docker compose build
 docker compose up api
 docker compose run --rm cli template validate --root /opt/app/templates
+```
+
+For local review writes, inject the token at runtime rather than storing it in
+Compose or Git:
+
+```bash
+PTCG_REVIEW_TOKEN='local-secret-from-approved-store' docker compose up api
 ```
 
 The production-delivery plan, explicit nonclaims, work packages and release
