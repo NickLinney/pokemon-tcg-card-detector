@@ -1,0 +1,50 @@
+flowchart LR
+    subgraph control ["Control and Governance"]
+        cap001["CAP-001 Governance, contracts, and run orchestration"]
+        cap007["CAP-007 Template registry and zone ontology"]
+    end
+    subgraph reference ["Reference and Corpus"]
+        cap002["CAP-002 Immutable artifacts and provenance"]
+        cap003["CAP-003 Corpus ingestion and canonicalization"]
+        cap004["CAP-004 Governed media and fingerprinting"]
+    end
+    subgraph perception ["Perception and Interpretation"]
+        cap005["CAP-005 Capture geometry and quality"]
+        cap006["CAP-006 Hierarchical template classification"]
+        cap008["CAP-008 Semantic zone localization"]
+        cap009["CAP-009 Typed extraction ensemble"]
+    end
+    subgraph reasoning ["Candidate Reasoning and Decision"]
+        cap010["CAP-010 Retrieval and active discrimination"]
+        cap011["CAP-011 Evidence comparison and fusion"]
+        cap012["CAP-012 Abstaining identity and printing decision"]
+    end
+    subgraph review ["Review and Inventory"]
+        cap013["CAP-013 Human review, supersession, and inventory"]
+    end
+    subgraph assurance ["Evaluation and Operations"]
+        cap014["CAP-014 Ground truth, evaluation, calibration, and drift"]
+        cap015["CAP-015 Security, reliability, recovery, and operations"]
+    end
+
+    cap001 -->|"Governs versions and stages"| cap002
+    cap001 -->|"Governs registry lifecycle"| cap007
+    cap002 -->|"Preserves source snapshots"| cap003
+    cap003 -->|"Supplies reference truth"| cap004
+    cap005 -->|"Supplies geometry"| cap006
+    cap007 -->|"Defines templates"| cap006
+    cap006 -->|"Supplies hypotheses"| cap008
+    cap005 -->|"Supplies anchors"| cap008
+    cap007 -->|"Defines zones"| cap008
+    cap008 -->|"Supplies localized pixels"| cap009
+    cap003 -->|"Supplies indexes"| cap010
+    cap009 -->|"Supplies observations"| cap010
+    cap010 -->|"Supplies candidates"| cap011
+    cap004 -->|"Supplies image evidence"| cap011
+    cap011 -->|"Supplies fused evidence"| cap012
+    cap012 -->|"Routes outcomes"| cap013
+    cap014 -->|"Calibrates"| cap006
+    cap014 -->|"Calibrates"| cap011
+    cap014 -->|"Calibrates"| cap012
+    cap013 -->|"Supplies reviewed outcomes"| cap014
+    cap015 -->|"Protects and observes"| cap001

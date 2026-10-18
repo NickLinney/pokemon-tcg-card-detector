@@ -1,0 +1,26 @@
+flowchart LR
+    baseline(["Baseline freeze"]) ==> cap001["CAP-001 Governance and run control"]
+    cap001 ==> cap002["CAP-002 Immutable evidence"]
+    cap002 ==> cap003["CAP-003 Canonical corpus"]
+    cap003 ==> cap004["CAP-004 Governed media"]
+    cap002 ==> cap005["CAP-005 Geometry and quality"]
+    cap001 ==> cap007["CAP-007 Registry and zone ontology"]
+    cap005 ==> cap006["CAP-006 Template classification"]
+    cap007 ==> cap006
+    cap006 ==> cap008["CAP-008 Zone localization"]
+    cap005 ==> cap008
+    cap008 ==> cap009["CAP-009 Typed extraction"]
+    cap003 ==> cap010["CAP-010 Retrieval and discrimination"]
+    cap009 ==> cap010
+    cap004 ==> cap011["CAP-011 Comparison and fusion"]
+    cap010 ==> cap011
+    cap011 ==> cap012["CAP-012 Abstaining decisions"]
+    cap012 ==> cap013["CAP-013 Review and inventory"]
+    cap007 ==> cap014["CAP-014 Evaluation and calibration"]
+    cap013 ==> cap014
+    cap001 ==> cap015["CAP-015 Production operations"]
+    cap014 ==> cap015
+    cap015 ==> gate{"Production-readiness evidence complete?"}
+    gate -->|"No"| replan["ECEGF improvement and replan"]
+    replan -.-> cap001
+    gate -->|"Yes"| lifecycle(["Independent lifecycle decision"])

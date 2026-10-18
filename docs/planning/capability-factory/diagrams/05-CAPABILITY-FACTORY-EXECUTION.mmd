@@ -1,0 +1,16 @@
+flowchart LR
+    s01["S01 Governance and intent"] --> s02["S02 Evidence and context freeze"]
+    s02 --> s03["S03 Independent projections"]
+    s03 --> s04["S04 Pre-synthesis comparison"]
+    s04 --> s05["S05 Constructive synthesis"]
+    s05 --> s06["S06 Capability owner selection"]
+    s06 --> s07["S07 Dependency compilation"]
+    s07 --> s08["S08 Pattern and candidate discovery"]
+    s08 --> s09["S09 Nested fulfilment binding"]
+    s09 --> s10["S10 Package materialization"]
+    s10 --> s11["S11 Validation and audit"]
+    s11 --> s12["S12 Local ZIP release"]
+    s12 -.-> s13["S13 Publication readiness"]
+    s11 --> s14["S14 Cybernetic return"]
+    s12 --> s14
+    s14 -.->|"New evidence or contract change"| s01

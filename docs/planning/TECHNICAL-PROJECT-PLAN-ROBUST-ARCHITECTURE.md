@@ -4,6 +4,7 @@ Status: **Pre-Alpha construction plan; not a release authorization**
 Plan owner: **to be appointed**
 Architecture baseline: [`ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md`](../architecture/ROBUST-DETECTION-IDENTIFICATION-ARCHITECTURE.md)
 Project context: [`TURN-CONTEXT-INTO-PROJECT-CONTEXT.md`](TURN-CONTEXT-INTO-PROJECT-CONTEXT.md)
+Capability specification baseline: [`capability-factory/README.md`](capability-factory/README.md)
 
 ## 1. Executive intent
 
@@ -51,6 +52,13 @@ black-box plan:
 | S12 Zip release | Not performed; repository artifacts are the current deliverable |
 | S13 Publication readiness | Deferred pending independent review and lifecycle decision |
 | S14 Cybernetic return | ECEGF improvement register and milestone re-planning |
+
+The detailed execution successor `CF-PKMN-ROBUST-ARCH-2026-10-17-01` discovers
+and specifies fifteen required capabilities, thirty capability-level diagrams,
+five packet-level diagrams, reciprocal compatibility checkpoints, and the
+architecture development critical path. Those specifications are normative for
+planning within this candidate plan but do not represent implemented behavior
+or independent acceptance.
 
 ## 4. Work breakdown and deliverables
 

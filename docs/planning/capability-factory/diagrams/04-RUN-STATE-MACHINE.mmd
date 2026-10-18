@@ -1,0 +1,21 @@
+stateDiagram-v2
+    direction LR
+    [*] --> Ingested
+    Ingested --> GeometryComplete: geometry succeeds
+    GeometryComplete --> TemplateHypothesesReady: classification succeeds
+    TemplateHypothesesReady --> InitialObservationsReady: zones and extraction succeed
+    InitialObservationsReady --> CandidatesReady: retrieval succeeds
+    CandidatesReady --> DiscriminatorRequested: useful evidence action exists
+    DiscriminatorRequested --> CandidatesReady: bounded reread completes
+    CandidatesReady --> EvidenceFused: comparison completes
+    EvidenceFused --> Decided: policy evaluates
+    Decided --> ReviewRequired: policy routes review
+    Decided --> InventoryProjected: eligible projection
+    ReviewRequired --> Reviewed: disposition appended
+    Reviewed --> InventoryProjected: effective state projected
+    Ingested --> FailedQualified: input failure
+    GeometryComplete --> FailedQualified: perception failure
+    TemplateHypothesesReady --> FailedQualified: observation failure
+    InitialObservationsReady --> FailedQualified: reasoning failure
+    InventoryProjected --> [*]
+    FailedQualified --> [*]

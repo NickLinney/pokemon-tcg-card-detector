@@ -1,0 +1,12 @@
+flowchart LR
+    source["Capture and corpus source bytes"] -->|"Hash and preserve"| immutable[("Immutable artifact truth")]
+    immutable -->|"Map catalogue data"| reference[("Reference truth")]
+    immutable -->|"Derive geometry and zones"| observation[("Observation truth")]
+    reference -->|"Expected values"| comparison["Typed evidence comparison"]
+    observation -->|"Observed values"| comparison
+    comparison -->|"Support, dependencies, contradictions"| decision[("Decision truth")]
+    decision -->|"Routes"| review["Human review"]
+    review -->|"Appends superseding assertion"| decision
+    decision -->|"Projects latest effective state"| inventory[("Inventory projection")]
+    benchmark["Reviewed ground truth"] -->|"Measures and calibrates"| comparison
+    benchmark -->|"Measures and calibrates"| decision

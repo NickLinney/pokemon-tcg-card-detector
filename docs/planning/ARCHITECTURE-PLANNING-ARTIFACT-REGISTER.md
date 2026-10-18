@@ -39,6 +39,8 @@ artifacts used to derive the reports
 | `MPPRR-PROCESS-RECONSTRUCTION-REPORT.md` | Objects, relations, invariants, variability, process, decision boundaries |
 | `TURN-CONTEXT-INTO-PROJECT-CONTEXT.md` | Human intent, charter, requirements, scope, workstreams, acceptance |
 | `TECHNICAL-PROJECT-PLAN-ROBUST-ARCHITECTURE.md` | Composite technical project plan, backlog, milestones, lifecycle, DoD |
+| `capability-factory/` | Complete factory execution record, fifteen required capability specifications, critical path, RequestDocumentation reconstruction, traceability, and diagram sources |
+| `CAPABILITY-FACTORY-LOCAL-RELEASE-RECEIPT.md` | S12 local ZIP locator, SHA-256, integrity result, and nonclaims |
 
 ## 4. Side effects and limits
 
