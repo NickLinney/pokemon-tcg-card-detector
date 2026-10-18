@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review-case-v1",
+  "type": "object",
+  "required": ["schema_version", "review_id", "run_id", "location_id", "state", "evidence_version", "candidate_refs", "artifact_refs"],
+  "properties": {
+    "schema_version": {"const": "review-case-v1"},
+    "review_id": {"type": "string", "pattern": "^review-[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "location_id": {"type": "string", "minLength": 1},
+    "state": {"enum": ["REQUIRED", "RESOLVED", "UNRESOLVED", "RECAPTURE_REQUESTED"]},
+    "evidence_version": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_refs": {"type": "array", "items": {"type": "string"}},
+    "artifact_refs": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Pokemon TCG Card Detector Local API
+  version: 0.2.0-pre-alpha.2
+  description: Local-only, unreleased Pre-Alpha asynchronous evidence and review API.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /v1/meta:
+    get:
+      operationId: getMetadata
+      responses:
+        "200": {description: Product, pipeline and lifecycle identity.}
+  /v1/analysis-jobs:
+    post:
+      operationId: createAnalysisJob
+      parameters:
+        - {in: header, name: Idempotency-Key, required: true, schema: {type: string, minLength: 1, maxLength: 256}}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image, collection_id, binder_id]
+              properties:
+                image: {type: string, format: binary}
+                collection_id: {type: string}
+                binder_id: {type: string}
+                page_id: {type: string}
+                source_captured_at: {type: string, format: date-time}
+      responses:
+        "202": {description: Durable job admitted.}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "415": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /v1/analysis-jobs/{job_id}:
+    parameters:
+      - {$ref: "#/components/parameters/JobId"}
+    get:
+      operationId: getAnalysisJob
+      responses:
+        "200": {description: Current durable job state.}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/analysis-jobs/{job_id}:cancel:
+    parameters:
+      - {$ref: "#/components/parameters/JobId"}
+    post:
+      operationId: cancelAnalysisJob
+      responses:
+        "200": {description: Cancellation recorded or terminal state returned.}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/runs/{run_id}:
+    get:
+      operationId: getRun
+      parameters:
+        - {$ref: "#/components/parameters/RunId"}
+      responses:
+        "200": {description: Bounded run summary.}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/runs/{run_id}/artifacts:
+    get:
+      operationId: listRunArtifacts
+      parameters:
+        - {$ref: "#/components/parameters/RunId"}
+      responses:
+        "200": {description: Manifest-backed artifact descriptors.}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/runs/{run_id}/artifacts/{artifact_id}:
+    get:
+      operationId: downloadRunArtifact
+      parameters:
+        - {$ref: "#/components/parameters/RunId"}
+        - {in: path, name: artifact_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Verified immutable artifact bytes.}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/reviews:
+    get:
+      operationId: listReviews
+      parameters:
+        - {in: query, name: state, schema: {type: string, enum: [required, resolved, unresolved, recapture_requested]}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        "200": {description: Paginated review queue.}
+  /v1/reviews/{review_id}:
+    get:
+      operationId: getReview
+      parameters:
+        - {$ref: "#/components/parameters/ReviewId"}
+      responses:
+        "200": {description: Evidence-linked review read model.}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/reviews/{review_id}/dispositions:
+    post:
+      operationId: createReviewDisposition
+      parameters:
+        - {$ref: "#/components/parameters/ReviewId"}
+        - {in: header, name: X-PTCG-Actor, required: true, schema: {type: string}}
+        - {in: header, name: X-PTCG-Authority-Scope, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/DispositionInput"}
+      responses:
+        "201": {description: Append-only disposition accepted.}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/inventories/{collection_id}:
+    get:
+      operationId: getEffectiveInventory
+      parameters:
+        - {in: path, name: collection_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Latest evidence-linked effective inventory.}
+  /v1/pages/analyze:
+    post:
+      deprecated: true
+      operationId: analyzePageSynchronously
+      responses:
+        "200": {description: Deprecated compatibility response.}
+components:
+  parameters:
+    JobId: {in: path, name: job_id, required: true, schema: {type: string, pattern: "^job-[0-9a-f]{32}$"}}
+    RunId: {in: path, name: run_id, required: true, schema: {type: string}}
+    ReviewId: {in: path, name: review_id, required: true, schema: {type: string, pattern: "^review-[0-9a-f]{64}$"}}
+  schemas:
+    DispositionInput:
+      type: object
+      required: [action, reason, evidence_version, expected_prior_assertion]
+      properties:
+        action: {type: string, enum: [SELECT_CANDIDATE, MANUAL_ASSERTION, REJECT_ALL, CORRECT_FIELD, REQUEST_RECAPTURE, LEAVE_UNRESOLVED]}
+        reason: {type: string, minLength: 1, maxLength: 2048}
+        evidence_version: {type: string}
+        expected_prior_assertion: {type: [string, "null"]}
+        identity_assertion: {type: [object, "null"]}
+        printing_assertion: {type: [object, "null"]}
+        field_correction: {type: [object, "null"]}
+  responses:
+    Error:
+      description: Bounded error response.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string}
+              message: {type: string}

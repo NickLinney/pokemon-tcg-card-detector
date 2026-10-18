@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "artifact-descriptor-v1",
+  "type": "object",
+  "required": ["schema_version", "artifact_id", "run_id", "sha256", "bytes", "media_type", "role", "safe_filename", "downloadable"],
+  "properties": {
+    "schema_version": {"const": "artifact-descriptor-v1"},
+    "artifact_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bytes": {"type": "integer", "minimum": 0},
+    "media_type": {"type": "string", "minLength": 1},
+    "role": {"type": "string", "minLength": 1},
+    "safe_filename": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "downloadable": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}
