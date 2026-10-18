@@ -5,7 +5,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cv2
 
@@ -51,6 +51,7 @@ def analyze_page(
     *,
     idempotency_key: str | None = None,
     context: dict[str, Any] | None = None,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     image_path = image_path.resolve(strict=True)
     database_path = database_path.resolve(strict=True)
@@ -58,6 +59,8 @@ def analyze_page(
     source_hash = sha256_file(image_path)
     database_hash = sha256_file(database_path)
     context = validate_collection_context(context) if context is not None else default_sample_context()
+    cancel_check = cancel_check or (lambda: None)
+    cancel_check()
 
     registry = TemplateRegistry(template_root)
     template_findings = registry.validate()
@@ -121,12 +124,14 @@ def analyze_page(
     store: ReferenceStore | None = None
     try:
         source_image = load_image(image_path)
+        cancel_check()
         ledger.transition(
             "INGESTED",
             reason="Source decoded within configured bounds; original bytes retained immutably.",
             evidence_refs=[source_artifact["artifact_id"]],
         )
         detected_cards, page_geometry = detect_cards(source_image)
+        cancel_check()
         ledger.transition(
             "GEOMETRY_COMPLETE",
             reason="Supported geometry baseline produced reversible source polygons.",
@@ -135,6 +140,7 @@ def analyze_page(
         card_contexts: list[dict[str, Any]] = []
         neutral_template = registry.resolve("card.base.v1")
         for detected in detected_cards:
+            cancel_check()
             normalized_ref = artifacts.put_bytes(
                 _encode_png(detected.normalized),
                 media_type="image/png",
@@ -185,6 +191,7 @@ def analyze_page(
                 observations,
                 ocr_provider,
             )
+            cancel_check()
             card_contexts.append(
                 {
                     "detected": detected,
@@ -428,6 +435,7 @@ def analyze_page(
             "generated_at": utc_now(),
         }
         summary_path = write_json_new(run_directory / "page-summary.json", summary)
+        cancel_check()
         _write_inventory(run_directory, inventory_rows)
         summary["run_directory"] = str(run_directory)
         summary["summary_path"] = str(summary_path)

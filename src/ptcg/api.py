@@ -12,7 +12,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 from .pipeline import PIPELINE_VERSION
-from .jobs import IdempotencyConflict, JobNotFound, JobService, JobStore
+from .jobs import CapacityExceeded, IdempotencyConflict, JobNotFound, JobService, JobStore
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
 from .util import canonical_json_sha256, ensure_write_path, project_root
@@ -43,6 +43,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "PTCG_JOB_DATABASE", str(root / ".local" / "jobs" / "jobs.sqlite3")
         ),
         JOB_WORKERS=int(os.environ.get("PTCG_JOB_WORKERS", "1")),
+        MAX_ACTIVE_JOBS=int(os.environ.get("PTCG_MAX_ACTIVE_JOBS", "4")),
         RECOVER_JOBS=_environment_boolean("PTCG_RECOVER_JOBS", True),
         MAX_CONTENT_LENGTH=int(
             os.environ.get("PTCG_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
@@ -171,7 +172,12 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 source_path=image_path,
                 context=context,
                 idempotency_key=idempotency_key,
+                max_active_jobs=int(app.config["MAX_ACTIVE_JOBS"]),
             )
+        except CapacityExceeded as exc:
+            response = jsonify(error="capacity_exceeded", message=str(exc))
+            response.headers["Retry-After"] = str(exc.retry_after)
+            return response, 429
         except IdempotencyConflict as exc:
             return jsonify(error="idempotency_conflict", message=str(exc)), 409
         if created:
@@ -191,6 +197,16 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         response["transitions"] = job_store.transitions(job_id)
         if job["run_id"]:
             response["run_url"] = f"/v1/runs/{job['run_id']}"
+        return jsonify(response), 200
+
+    @app.post("/v1/analysis-jobs/<job_id>:cancel")
+    def cancel_analysis_job(job_id: str) -> tuple[Any, int]:
+        try:
+            job = job_store.cancel(job_id)
+        except JobNotFound:
+            return jsonify(error="job_not_found"), 404
+        response = dict(job)
+        response["status_url"] = f"/v1/analysis-jobs/{job_id}"
         return jsonify(response), 200
 
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):

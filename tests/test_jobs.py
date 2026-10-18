@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ptcg.jobs import IdempotencyConflict, IllegalJobTransition, JobStore
+from ptcg.jobs import CapacityExceeded, IdempotencyConflict, IllegalJobTransition, JobStore
 
 
 def test_job_store_is_durable_append_only_and_hides_raw_key(tmp_path: Path, monkeypatch):
@@ -68,3 +68,32 @@ def test_recovery_requeues_running_and_finishes_recorded_cancel(tmp_path: Path, 
         "RECOVERY_REQUIRED",
         "ADMITTED",
     ]
+
+
+def test_capacity_rejection_allows_idempotent_replay(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PTCG_PROJECT_ROOT", str(tmp_path))
+    source = tmp_path / "source.jpeg"
+    source.write_bytes(b"image")
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    context = {"collection_id": "c1", "binder_id": "b1", "page_id": "p1"}
+    first, _ = store.create_or_get(
+        source_path=source,
+        context=context,
+        idempotency_key="one",
+        max_active_jobs=1,
+    )
+    replay, created = store.create_or_get(
+        source_path=source,
+        context=context,
+        idempotency_key="one",
+        max_active_jobs=1,
+    )
+    assert created is False
+    assert replay["job_id"] == first["job_id"]
+    with pytest.raises(CapacityExceeded):
+        store.create_or_get(
+            source_path=source,
+            context={**context, "page_id": "p2"},
+            idempotency_key="two",
+            max_active_jobs=1,
+        )
