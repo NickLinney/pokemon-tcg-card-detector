@@ -239,16 +239,21 @@ class ReviewStore:
                 "created_at": occurred_at,
             }
             assertion["assertion_id"] = f"sha256:{canonical_json_sha256(assertion)}"
+            assertion_sequence = connection.execute(
+                "SELECT COUNT(*) FROM superseding_assertions WHERE review_id = ?",
+                (review_id,),
+            ).fetchone()[0] + 1
             connection.execute(
                 """
                 INSERT INTO superseding_assertions (
-                    assertion_id, review_id, collection_id, location_id,
+                    assertion_id, review_id, sequence, collection_id, location_id,
                     created_at, assertion_json
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     assertion["assertion_id"],
                     review_id,
+                    assertion_sequence,
                     row["collection_id"],
                     row["location_id"],
                     occurred_at,
@@ -280,7 +285,7 @@ class ReviewStore:
             rows = connection.execute(
                 """
                 SELECT assertion_json FROM superseding_assertions
-                WHERE review_id = ? ORDER BY created_at, assertion_id
+                WHERE review_id = ? ORDER BY sequence, assertion_id
                 """,
                 (review_id,),
             ).fetchall()
@@ -456,6 +461,7 @@ class ReviewStore:
                 CREATE TABLE IF NOT EXISTS superseding_assertions (
                     assertion_id TEXT PRIMARY KEY,
                     review_id TEXT NOT NULL,
+                    sequence INTEGER,
                     collection_id TEXT NOT NULL,
                     location_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -464,6 +470,13 @@ class ReviewStore:
                 )
                 """
             )
+            assertion_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(superseding_assertions)")
+            }
+            if "sequence" not in assertion_columns:
+                connection.execute(
+                    "ALTER TABLE superseding_assertions ADD COLUMN sequence INTEGER"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path, timeout=30)
