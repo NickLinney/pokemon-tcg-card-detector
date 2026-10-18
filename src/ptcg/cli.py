@@ -45,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--ocr", choices=("easyocr", "none"), default="easyocr")
     analyze.add_argument("--download-ocr-models", action="store_true")
     analyze.add_argument("--idempotency-key")
+    analyze.add_argument("--collection-id", default="sample")
+    analyze.add_argument("--binder-id", default="sample")
+    analyze.add_argument("--page-id", default="page-1")
+    analyze.add_argument("--source-captured-at")
 
     return parser
 
@@ -78,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
             ocr_mode=args.ocr,
             download_ocr_models=args.download_ocr_models,
             idempotency_key=args.idempotency_key,
+            context={
+                "collection_id": args.collection_id,
+                "binder_id": args.binder_id,
+                "page_id": args.page_id,
+                "source_captured_at": args.source_captured_at,
+            },
         )
     else:  # pragma: no cover - argparse prevents this branch
         raise AssertionError("unreachable command")
