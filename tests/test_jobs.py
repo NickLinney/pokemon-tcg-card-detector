@@ -43,3 +43,28 @@ def test_job_store_rejects_idempotency_conflict(tmp_path: Path, monkeypatch):
     store.create_or_get(source_path=first, context=context, idempotency_key="same")
     with pytest.raises(IdempotencyConflict):
         store.create_or_get(source_path=second, context=context, idempotency_key="same")
+
+
+def test_recovery_requeues_running_and_finishes_recorded_cancel(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PTCG_PROJECT_ROOT", str(tmp_path))
+    source = tmp_path / "source.jpeg"
+    source.write_bytes(b"image")
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    context = {"collection_id": "c1", "binder_id": "b1", "page_id": "p1"}
+    running, _ = store.create_or_get(
+        source_path=source, context=context, idempotency_key="running"
+    )
+    store.transition(running["job_id"], "RUNNING", reason="worker")
+    canceling, _ = store.create_or_get(
+        source_path=source, context=context, idempotency_key="canceling"
+    )
+    store.transition(canceling["job_id"], "CANCEL_REQUESTED", reason="operator")
+
+    reopened = JobStore(tmp_path / "jobs.sqlite3")
+    assert reopened.recover_interrupted() == [running["job_id"]]
+    assert reopened.get(running["job_id"])["state"] == "ADMITTED"
+    assert reopened.get(canceling["job_id"])["state"] == "CANCELED"
+    assert [item["to_state"] for item in reopened.transitions(running["job_id"])][-2:] == [
+        "RECOVERY_REQUIRED",
+        "ADMITTED",
+    ]

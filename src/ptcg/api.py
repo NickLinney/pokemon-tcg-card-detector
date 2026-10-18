@@ -43,6 +43,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "PTCG_JOB_DATABASE", str(root / ".local" / "jobs" / "jobs.sqlite3")
         ),
         JOB_WORKERS=int(os.environ.get("PTCG_JOB_WORKERS", "1")),
+        RECOVER_JOBS=_environment_boolean("PTCG_RECOVER_JOBS", True),
         MAX_CONTENT_LENGTH=int(
             os.environ.get("PTCG_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
         ),
@@ -62,6 +63,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         model_directory=Path(app.config["MODEL_DIRECTORY"]),
         download_ocr_models=bool(app.config["DOWNLOAD_OCR_MODELS"]),
     )
+    if app.config["RECOVER_JOBS"]:
+        app.extensions["ptcg_jobs_to_recover"] = job_store.recover_interrupted()
 
     @app.get("/healthz")
     def health() -> tuple[Any, int]:
@@ -190,6 +193,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             response["run_url"] = f"/v1/runs/{job['run_id']}"
         return jsonify(response), 200
 
+    for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
+        _launch_job(app, job_id)
     return app
 
 
