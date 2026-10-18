@@ -7,6 +7,7 @@ from pathlib import Path
 from .audit import verify_run
 from .service import analyze_page_request
 from .reviews import ReviewStore
+from .evaluation import GroundTruthRegistry
 from .tcgdex import ingest_tcgdex, verify_database
 from .template_registry import TemplateRegistry
 from .version import CANONICAL_VERSION
@@ -92,6 +93,11 @@ def build_parser() -> argparse.ArgumentParser:
     inventory_export.add_argument("--database", type=Path, required=True)
     inventory_export.add_argument("--output", type=Path, required=True)
 
+    evaluate = subparsers.add_parser("evaluate")
+    evaluate_commands = evaluate.add_subparsers(dest="evaluate_command", required=True)
+    fixture_validate = evaluate_commands.add_parser("fixtures")
+    fixture_validate.add_argument("registry", type=Path)
+
     return parser
 
 
@@ -161,6 +167,11 @@ def main(argv: list[str] | None = None) -> int:
             args.collection_id, args.output
         )
         result = {key: str(value) for key, value in paths.items()}
+    elif args.command == "evaluate" and args.evaluate_command == "fixtures":
+        result = GroundTruthRegistry.load(args.registry).validate()
+        if result["status"] != "PASS":
+            print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+            return 6
     else:  # pragma: no cover - argparse prevents this branch
         raise AssertionError("unreachable command")
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))

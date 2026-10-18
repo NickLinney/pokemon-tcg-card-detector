@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ground-truth-registry-v1",
+  "type": "object",
+  "required": ["schema_version", "registry_id", "fixtures"],
+  "properties": {
+    "schema_version": {"const": "ground-truth-registry-v1"},
+    "registry_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fixture_id", "content_sha256", "source", "permitted_use", "rights_state", "split", "annotation_state", "truth"],
+        "properties": {
+          "fixture_id": {"type": "string", "minLength": 1},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source": {"type": "object"},
+          "permitted_use": {"enum": ["TRAINING", "DEVELOPMENT", "EVALUATION"]},
+          "rights_state": {"enum": ["APPROVED", "PENDING", "DENIED"]},
+          "split": {"enum": ["train", "development", "evaluation"]},
+          "annotation_state": {"enum": ["UNANNOTATED", "ANNOTATED", "ADJUDICATED", "DISPUTED"]},
+          "truth": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
