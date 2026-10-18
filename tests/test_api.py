@@ -4,6 +4,7 @@ import hashlib
 from ptcg.api import create_app
 from ptcg.evidence import ContentAddressedArtifactStore
 from ptcg.run_catalog import seal_artifact_index
+from tests.test_reviews import build_review_run
 
 
 def _configured_app(tmp_path: Path, monkeypatch):
@@ -21,6 +22,7 @@ def _configured_app(tmp_path: Path, monkeypatch):
             "JOB_DATABASE": str(tmp_path / "jobs" / "jobs.sqlite3"),
             "RECOVER_JOBS": False,
             "MAX_ACTIVE_JOBS": 4,
+            "REVIEW_DATABASE": str(tmp_path / "reviews" / "reviews.sqlite3"),
             "OCR_MODE": "none",
         }
     )
@@ -304,6 +306,19 @@ def test_artifact_download_detects_tampered_bytes(tmp_path: Path, monkeypatch):
     )
     assert response.status_code == 409
     assert response.get_json()["error"] == "artifact_integrity_failure"
+
+
+def test_review_queue_and_detail_endpoints(tmp_path: Path, monkeypatch):
+    app = _configured_app(tmp_path, monkeypatch)
+    run = build_review_run(tmp_path)
+    review_id = app.extensions["ptcg_review_store"].index_run(run)[0]
+    listed = app.test_client().get("/v1/reviews?state=required&limit=10")
+    assert listed.status_code == 200
+    assert listed.get_json()["total"] == 1
+    detail = app.test_client().get(f"/v1/reviews/{review_id}")
+    assert detail.status_code == 200
+    assert detail.get_json()["evidence_version"].startswith("sha256:")
+    assert app.test_client().get("/v1/reviews/review-missing").status_code == 404
 
 
 def bytes_io(value: bytes):

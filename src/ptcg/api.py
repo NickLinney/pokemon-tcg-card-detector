@@ -19,6 +19,7 @@ from .run_catalog import (
     RunNotFound,
     RunNotSealed,
 )
+from .reviews import ReviewNotFound, ReviewStore
 from .jobs import CapacityExceeded, IdempotencyConflict, JobNotFound, JobService, JobStore
 from .service import analyze_page_request
 from .template_registry import TemplateRegistry
@@ -52,6 +53,9 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         JOB_WORKERS=int(os.environ.get("PTCG_JOB_WORKERS", "1")),
         MAX_ACTIVE_JOBS=int(os.environ.get("PTCG_MAX_ACTIVE_JOBS", "4")),
         RECOVER_JOBS=_environment_boolean("PTCG_RECOVER_JOBS", True),
+        REVIEW_DATABASE=os.environ.get(
+            "PTCG_REVIEW_DATABASE", str(root / ".local" / "reviews" / "reviews.sqlite3")
+        ),
         MAX_CONTENT_LENGTH=int(
             os.environ.get("PTCG_MAX_CONTENT_LENGTH", DEFAULT_MAX_CONTENT_LENGTH)
         ),
@@ -63,6 +67,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     app.extensions["ptcg_job_store"] = job_store
     run_catalog = RunCatalog(Path(app.config["OUTPUT_ROOT"]))
     app.extensions["ptcg_run_catalog"] = run_catalog
+    review_store = ReviewStore(Path(app.config["REVIEW_DATABASE"]))
+    app.extensions["ptcg_review_store"] = review_store
     app.extensions["ptcg_job_service"] = JobService(
         job_store,
         analyze_page_request,
@@ -72,6 +78,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         ocr_mode=app.config["OCR_MODE"],
         model_directory=Path(app.config["MODEL_DIRECTORY"]),
         download_ocr_models=bool(app.config["DOWNLOAD_OCR_MODELS"]),
+        run_indexer=review_store.index_run,
     )
     if app.config["RECOVER_JOBS"]:
         app.extensions["ptcg_jobs_to_recover"] = job_store.recover_interrupted()
@@ -264,6 +271,23 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         response.headers["X-Artifact-ID"] = descriptor["artifact_id"]
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+    @app.get("/v1/reviews")
+    def list_reviews() -> tuple[Any, int]:
+        try:
+            state = request.args.get("state", "required").upper()
+            limit = int(request.args.get("limit", "25"))
+            offset = int(request.args.get("offset", "0"))
+            return jsonify(review_store.list(state=state, limit=limit, offset=offset)), 200
+        except (ValueError, TypeError) as exc:
+            return jsonify(error="invalid_review_query", message=str(exc)), 400
+
+    @app.get("/v1/reviews/<review_id>")
+    def get_review(review_id: str) -> tuple[Any, int]:
+        try:
+            return jsonify(review_store.get(review_id)), 200
+        except ReviewNotFound:
+            return jsonify(error="review_not_found"), 404
 
     for job_id in app.extensions.get("ptcg_jobs_to_recover", []):
         _launch_job(app, job_id)
