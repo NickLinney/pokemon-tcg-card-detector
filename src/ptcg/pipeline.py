@@ -21,6 +21,7 @@ from .ocr import OCRProvider, classify_script, parse_collector_number, parse_hp
 from .run_control import RunLedger, RunManifest
 from .run_catalog import seal_artifact_index
 from .store import ReferenceStore
+from .symbols import SymbolProvider, UnsupportedSymbolProvider
 from .template_registry import TemplateRegistry, crop_zone
 from .util import ensure_write_path, sha256_file, unique_path, utc_now, write_json_new
 from .vision import (
@@ -53,6 +54,7 @@ def analyze_page(
     idempotency_key: str | None = None,
     context: dict[str, Any] | None = None,
     cancel_check: Callable[[], None] | None = None,
+    symbol_provider: SymbolProvider | None = None,
 ) -> dict[str, Any]:
     image_path = image_path.resolve(strict=True)
     database_path = database_path.resolve(strict=True)
@@ -61,6 +63,7 @@ def analyze_page(
     database_hash = sha256_file(database_path)
     context = validate_collection_context(context) if context is not None else default_sample_context()
     cancel_check = cancel_check or (lambda: None)
+    symbol_provider = symbol_provider or UnsupportedSymbolProvider()
     cancel_check()
 
     registry = TemplateRegistry(template_root)
@@ -191,6 +194,7 @@ def analyze_page(
                 selected_template,
                 observations,
                 ocr_provider,
+                symbol_provider,
             )
             cancel_check()
             card_contexts.append(
@@ -509,6 +513,7 @@ def _extract_declared_zones(
     template: dict[str, Any],
     observations: dict[str, dict[str, Any]],
     provider: OCRProvider,
+    symbol_provider: SymbolProvider,
 ) -> None:
     for zone_id, zone in template.get("zones", {}).items():
         extractor_provider = zone.get("extractor", {}).get("provider")
@@ -548,6 +553,35 @@ def _extract_declared_zones(
                 attempted=True,
                 provider_id="opencv:visual-features-v1",
             )
+        elif extractor_provider == "symbol":
+            crop, _ = crop_zone(image, zone)
+            observation = observations[zone_id]
+            result = symbol_provider.extract(
+                crop,
+                zone_id=zone_id,
+                template_id=template["template_id"],
+            )
+            if result["state"] == "UNSUPPORTED":
+                observation["extraction_state"] = "UNSUPPORTED"
+                observation["extractor_attempts"].append(
+                    {
+                        "provider": result["provider"],
+                        "raw_preserved": True,
+                        "result": "UNSUPPORTED",
+                        "artifact_id": observation["prior_crop_artifact"]["artifact_id"],
+                        "warning": result["uncertainty"],
+                    }
+                )
+            else:
+                attach_extraction(
+                    observation,
+                    artifact_ref=observation["prior_crop_artifact"],
+                    ocr=None,
+                    typed_value=result["typed_value"],
+                    attempted=True,
+                    provider_id=result["provider"],
+                )
+                observation["symbol_result"] = result
 
 
 def _parse_first_integer(ocr: dict[str, Any]) -> int | None:

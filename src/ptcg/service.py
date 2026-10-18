@@ -7,6 +7,7 @@ from .ocr import EasyOCRProvider, NullOCRProvider, OCRProvider
 from .pipeline import analyze_page
 from .util import project_root
 from .workflow import validate_collection_context
+from .symbols import SymbolProvider
 
 
 def build_ocr_provider(
@@ -36,6 +37,7 @@ def analyze_page_request(
     idempotency_key: str | None = None,
     context: dict[str, Any] | None = None,
     cancel_check: Callable[[], None] | None = None,
+    symbol_provider: SymbolProvider | None = None,
 ) -> dict[str, Any]:
     """Execute page analysis for CLI, HTTP, or an importing Python process."""
     provider = build_ocr_provider(
@@ -52,4 +54,5 @@ def analyze_page_request(
         idempotency_key=idempotency_key,
         context=validate_collection_context(context) if context is not None else None,
         cancel_check=cancel_check,
+        symbol_provider=symbol_provider,
     )

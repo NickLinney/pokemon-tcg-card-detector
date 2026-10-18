@@ -5,6 +5,7 @@ from ptcg.evaluation import (
     GroundTruthRegistry,
     score_template_classification,
     score_zone_localization,
+    score_typed_extraction,
 )
 
 
@@ -111,3 +112,29 @@ def test_zone_scorecard_separates_presence_geometry_and_status():
     assert scorecard["keypoint_accuracy"] == 1.0
     assert scorecard["localization_status_counts"]["FALLBACK_USED"] == 1
     assert scorecard["strata"]["pokemon-modern/symbol"]["evidence_state"] == "EVIDENCE_REQUIRED"
+
+
+def test_typed_extraction_scorecard_keeps_unsupported_separate():
+    item = fixture("extract", "4" * 64)
+    item["truth"]["zones"] = {
+        "title": {"zone_type": "text", "typed_value": "pikachu"},
+        "set_symbol": {"zone_type": "set_symbol", "typed_value": "sv"},
+        "rarity": {"zone_type": "rarity_symbol", "typed_value": "rare"},
+    }
+    registry = GroundTruthRegistry.build([item])
+    scorecard = score_typed_extraction(
+        registry,
+        [
+            {
+                "fixture_id": "extract",
+                "zones": {
+                    "title": {"state": "SUCCEEDED", "typed_value": "pikachu"},
+                    "set_symbol": {"state": "UNSUPPORTED", "typed_value": None},
+                    "rarity": {"state": "NO_SIGNAL", "typed_value": None},
+                },
+            }
+        ],
+    )
+    assert scorecard["by_zone_type"]["text"]["typed_accuracy"] == 1.0
+    assert scorecard["by_zone_type"]["set_symbol"]["unsupported_rate"] == 1.0
+    assert scorecard["by_zone_type"]["rarity_symbol"]["no_signal_rate"] == 1.0
